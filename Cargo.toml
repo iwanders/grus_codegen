@@ -5,3 +5,10 @@ edition = "2021"
 license = "Apache-2.0 WITH LLVM-exception"
 
 [dependencies]
+cranelift-codegen = {version="0.116.1", features=["x86", "arm64"]}
+target-lexicon = "0.13.1"
+cranelift-reader = "0.116.1"
+cranelift-jit = "0.116.1"
+cranelift-module = "0.116.1"
+cranelift-native = "0.116.1"
+cranelift-object = "0.116.1"
