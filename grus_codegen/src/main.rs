@@ -5,6 +5,7 @@ type ResultReturn = Result<(), ResultError>;
 
 // https://github.com/bytecodealliance/wasmtime/issues/10118
 fn attempt_two() -> ResultReturn {
+    let args: Vec<String> = std::env::args().collect();
     // use crate::frontend::*;
     // use cranelift::prelude::*;
     // use cranelift_jit::{JITBuilder, JITModule};
@@ -59,7 +60,10 @@ fn attempt_two() -> ResultReturn {
     )?;
     let mut module = cranelift_object::ObjectModule::new(builder);
 
-    let f = std::fs::read_to_string("./filetests/average.clif")?;
+    let f = std::fs::read_to_string(
+        args.get(1)
+            .unwrap_or(&"./filetests/average.clif".to_owned()),
+    )?;
 
     let mut fun = cranelift_reader::parse_functions(&f)?;
     let mut fun = fun.drain(..).next().unwrap();

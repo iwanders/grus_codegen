@@ -1,0 +1,7 @@
+test compile
+target x86_64
+function %constant_i64() -> i64 system_v {
+  block0:
+    v3 = iconst.i64 42
+    return v3
+}
