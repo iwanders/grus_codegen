@@ -34,7 +34,7 @@ impl X86Isa {
         let _ = func;
         let frame_size = 0;
         // let buffer = cranelift_codegen::MachBuffer::<cranelift_codegen::machineinst::Stencil>::new();
-        let buffer = vec![];
+        let buffer = vec![0x90, 0x90, 0x90, 0x90];
         Ok(CompiledCode {
             buffer,
             // Size of stack frame, in bytes.

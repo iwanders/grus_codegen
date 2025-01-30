@@ -2,6 +2,7 @@
 
 type ResultError = Box<dyn std::error::Error>;
 type ResultReturn = Result<(), ResultError>;
+use grus_module::{Linkage, ObjectModule};
 
 // https://github.com/bytecodealliance/wasmtime/issues/10118
 fn attempt_two() -> ResultReturn {
@@ -21,6 +22,20 @@ fn attempt_two() -> ResultReturn {
     let mut fun = cranelift_reader::parse_functions(&f)?;
     let fun = fun.drain(..).next().unwrap();
     println!("fun: {fun:?}");
+
+    let res = isa.compile_function(&fun)?;
+
+    let mut module = ObjectModule::new();
+    let id = module.declare_function("foo", Linkage::Export, &fun.signature)?;
+    module.define_function_bytes(id, 0, &res.buffer)?;
+
+    let object_data = module.finish()?;
+
+    let write_to_disk = true;
+    if write_to_disk {
+        // Looks legit and is modified whenever the clif is modified.
+        std::fs::write("/tmp/average.o", object_data)?;
+    }
 
     Ok(())
 }
