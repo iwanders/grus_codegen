@@ -8,8 +8,15 @@ use cranelift_codegen::isa::{
 use cranelift_codegen::settings::{Flags, Value};
 use cranelift_codegen::{CodegenResult, CompiledCode, TextSectionBuilder}; // CodegenError, Final
 
-// This one is actually private...?
+// This one is actually private...... and it's a pretty complex struct, shelving this approach
+// for now and instead relying on the module's declare function. We will keep the same interface
+// roughly, but just not define the trait.
 use cranelift_codegen::CompiledCodeStencil;
+
+// More problems, the cranelift_object::ObjectBuilder also takes an isa, so we can't even call into
+// define_function_bytes for a module and then rely on our own assembly.
+
+// And CompiledCodeStencil is also ghastly complex to work with :<.
 
 use target_lexicon::Triple;
 
@@ -58,7 +65,26 @@ impl TargetIsa for X86Isa {
         ctrl_plane: &mut ControlPlane,
     ) -> CodegenResult<CompiledCodeStencil> {
         let _ = (func, domtree, want_disasm, ctrl_plane);
-        todo!()
+        let frame_size = 0;
+        // let buffer = cranelift_codegen::MachBuffer::<cranelift_codegen::machineinst::Stencil>::new();
+        let buffer = todo!();
+        Ok(CompiledCodeStencil {
+            buffer,
+            // Size of stack frame, in bytes.
+            frame_size,
+
+            // Disassembly, if requested.
+            vcode: Default::default(),
+
+            // Debug info related.
+            value_labels_ranges: Default::default(),
+            sized_stackslot_offsets: Default::default(),
+            dynamic_stackslot_offsets: Default::default(),
+
+            // only generated if machine_code_cfg_info
+            bb_starts: Default::default(),
+            bb_edges: Default::default(),
+        })
     }
     fn emit_unwind_info(
         &self,

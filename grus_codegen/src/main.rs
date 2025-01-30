@@ -14,26 +14,8 @@ fn attempt_two() -> ResultReturn {
 
     // https://github.com/bytecodealliance/cranelift-jit-demo/blob/main/src/jit.rs
 
-    let flag_builder = cranelift_codegen::settings::builder();
-
-    let autoselect = false;
-    // let autoselect = true;
-
-    // let isa_name_to_use = "aarch64";
-    let isa_name_to_use = "x86_64"; // Panics on debug assert cranelift-codegen-0.116.1/src/isa/x64/lower.rs:233
-
-    let isa = if autoselect {
-        let isa_builder = cranelift_native::builder().unwrap_or_else(|msg| {
-            panic!("host machine is not supported: {}", msg);
-        });
-        // let isa = isa_builder
-        isa_builder.finish(Flags::new(flag_builder)).unwrap()
-    } else {
-        let flags = Flags::new(flag_builder);
-        println!("flags: {}", &flags);
-
-        cranelift_codegen::isa::lookup_by_name(isa_name_to_use)?.finish(flags)?
-    };
+    use cranelift_codegen::isa::TargetIsa;
+    let isa = X86Isa::new(Flags::new(cranelift_codegen::settings::builder())).wrapped();
 
     // use cranelift_codegen::isa::TargetIsa;
     // let isa = X86Isa::new(Flags::new(cranelift_codegen::settings::builder())).wrapped();
