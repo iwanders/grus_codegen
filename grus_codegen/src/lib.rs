@@ -1,1 +1,2 @@
-use cranelift_codegen::isa::TargetIsa;
+pub mod isa;
+pub use isa::X86Isa;

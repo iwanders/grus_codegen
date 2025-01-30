@@ -10,6 +10,8 @@ fn attempt_two() -> ResultReturn {
     use cranelift_codegen::settings::Flags;
     use cranelift_module::{Linkage, Module};
 
+    use grus_codegen::X86Isa;
+
     // https://github.com/bytecodealliance/cranelift-jit-demo/blob/main/src/jit.rs
 
     let flag_builder = cranelift_codegen::settings::builder();
@@ -32,6 +34,10 @@ fn attempt_two() -> ResultReturn {
 
         cranelift_codegen::isa::lookup_by_name(isa_name_to_use)?.finish(flags)?
     };
+
+    use cranelift_codegen::isa::TargetIsa;
+    // use grus_codegen::X86Isa;
+    let isa = X86Isa::new(Flags::new(cranelift_codegen::settings::builder())).wrapped();
 
     println!("isa.triple(): {}", &isa.triple());
     println!("isa: {}", &isa);
