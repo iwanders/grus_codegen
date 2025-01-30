@@ -6,18 +6,13 @@ type ResultReturn = Result<(), ResultError>;
 // https://github.com/bytecodealliance/wasmtime/issues/10118
 fn attempt_two() -> ResultReturn {
     let args: Vec<String> = std::env::args().collect();
-    // use crate::frontend::*;
-    // use cranelift::prelude::*;
-    // use cranelift_jit::{JITBuilder, JITModule};
-    use cranelift_codegen::settings::Configurable;
+
     use cranelift_codegen::settings::Flags;
-    use cranelift_module::{DataDescription, Linkage, Module};
-    use std::collections::HashMap;
-    use std::slice;
+    use cranelift_module::{Linkage, Module};
 
     // https://github.com/bytecodealliance/cranelift-jit-demo/blob/main/src/jit.rs
 
-    let mut flag_builder = cranelift_codegen::settings::builder();
+    let flag_builder = cranelift_codegen::settings::builder();
 
     let autoselect = false;
     // let autoselect = true;
@@ -66,7 +61,7 @@ fn attempt_two() -> ResultReturn {
     )?;
 
     let mut fun = cranelift_reader::parse_functions(&f)?;
-    let mut fun = fun.drain(..).next().unwrap();
+    let fun = fun.drain(..).next().unwrap();
 
     // let mut ctx = module.make_context();
     let mut ctx = cranelift_codegen::Context::for_function(fun);
