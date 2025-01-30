@@ -6,10 +6,20 @@ license = "Apache-2.0 WITH LLVM-exception"
 
 [dependencies]
 
-cranelift-codegen = {path="../../../bytecodealliance/wasmtime/cranelift/codegen", features=["x86", "arm64"]}
 target-lexicon = {version="0.13.1"}
-cranelift-reader = {path="../../../bytecodealliance/wasmtime/cranelift/reader"}
-cranelift-jit = {path="../../../bytecodealliance/wasmtime/cranelift/jit"}
-cranelift-module = {path="../../../bytecodealliance/wasmtime/cranelift/module"}
-cranelift-native = {path="../../../bytecodealliance/wasmtime/cranelift/native"}
-cranelift-object = {path="../../../bytecodealliance/wasmtime/cranelift/object"}
+
+#cranelift-codegen = {path="../../../bytecodealliance/wasmtime/cranelift/codegen", features=["x86", "arm64"]}
+#cranelift-reader = {path="../../../bytecodealliance/wasmtime/cranelift/reader"}
+#cranelift-jit = {path="../../../bytecodealliance/wasmtime/cranelift/jit"}
+#cranelift-module = {path="../../../bytecodealliance/wasmtime/cranelift/module"}
+#cranelift-native = {path="../../../bytecodealliance/wasmtime/cranelift/native"}
+#cranelift-object = {path="../../../bytecodealliance/wasmtime/cranelift/object"}
+
+
+cranelift-codegen = {version="0.116.1", features=["x86", "arm64"]}
+cranelift-reader = "0.116.1"
+cranelift-jit = "0.116.1"
+cranelift-module = "0.116.1"
+cranelift-native = "0.116.1"
+cranelift-object = "0.116.1"
+cranelift = "0.116.1"
