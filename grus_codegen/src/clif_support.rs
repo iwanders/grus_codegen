@@ -10,9 +10,11 @@
 */
 
 use anyhow::{Context, Result};
-use cranelift_reader::TestFile;
+use cranelift_codegen::data_value::DataValue;
+use cranelift_reader::{Comparison, TestFile};
 
 use grus_module::{Linkage, ObjectModule};
+use log::{info, trace, warn};
 
 pub fn process_test_file(test_file: &TestFile) -> Result<()> {
     // First, compile all functions.
@@ -49,37 +51,71 @@ pub fn process_test_file(test_file: &TestFile) -> Result<()> {
         // Probably this works?
         fun_trampolines.push(Box::new(move || {
             use std::arch::asm;
-            let mut x: u64 = 0;
+            let mut x: u64;
             unsafe {
                 asm!(
-                    "call {p}",
-                    // "ret",
+                    "call {p};",
+                    // "mov {x}, %eax;",
                     // x = inout(reg) x,
                     p = in(reg) p,
+                    lateout("eax") x,
                 );
             }
             x
         }));
     }
 
+    let mut count_failures = 0;
+    let mut count_success = 0;
+
     for (i, (f, detail)) in test_file.functions.iter().enumerate() {
         for c in detail.comments.iter() {
             if let Some(cmd) = cranelift_reader::parse_run_command(c.text, &f.signature)? {
-                println!("cmd: {cmd:?}");
+                trace!("cmd: {cmd:?}");
+                trace!(" sign: {:?}", f.signature);
                 if let cranelift_reader::RunCommand::Run(invocation, comparison, args) = cmd {
-                    println!("invocation: {:?}, {:?}", invocation.func, invocation.args);
-                    println!("comparison: {comparison:?}");
-                    println!("args: {args:?}");
+                    trace!("invocation: {:?}, {:?}", invocation.func, invocation.args);
+                    if !invocation.args.is_empty() {
+                        todo!("Handle arguments in trampoline");
+                    }
+                    trace!("comparison: {comparison:?}");
+                    trace!("args: {args:?}");
                     // lets goooo!
                     let trampo = &fun_trampolines[i];
                     let res = (*trampo)();
-                    println!("result: {res:?}");
+                    trace!("result: {res:?}");
+
+                    match comparison {
+                        Comparison::Equals => {
+                            // args[1] + 3;
+                            for (index, expected) in args.iter().enumerate() {
+                                let return_type = f.signature.returns[index];
+                                let returned =
+                                    DataValue::from_integer(res as i128, return_type.value_type)?;
+                                if returned == *expected {
+                                    trace!("Comparison::Equals: {returned:?} == {expected:?}");
+                                    count_success += 1;
+                                } else {
+                                    warn!(
+                                        "FAILED Comparison::Equals: {returned:?} != {expected:?}"
+                                    );
+                                    count_failures += 1;
+                                }
+                            }
+                        }
+                        Comparison::NotEquals => todo!(),
+                    }
                 } else {
                     todo!()
                 }
             }
         }
     }
+
+    if count_failures != 0 {
+        warn!("Failures: {count_failures}");
+    }
+
     Ok(())
 }
 

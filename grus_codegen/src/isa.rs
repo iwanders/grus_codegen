@@ -19,7 +19,7 @@ impl X86Isa {
 #[derive(Debug)]
 pub struct CompiledCode {
     pub buffer: Vec<u8>,
-    pub frame_size: usize,
+    // pub frame_size: usize,
 }
 
 impl X86Isa {
@@ -32,16 +32,18 @@ impl X86Isa {
 
     pub fn compile_function(&self, func: &Function) -> CodegenResult<CompiledCode> {
         let _ = func;
-        let frame_size = 0;
-        // let buffer = cranelift_codegen::MachBuffer::<cranelift_codegen::machineinst::Stencil>::new();
+        // let frame_size = 0;
+
         const NOP: u8 = 0x90;
         const RETN: u8 = 0xc3;
         const INT3: u8 = 0xcc;
-        let buffer = vec![NOP, NOP, INT3, RETN];
+        // let buffer = vec![0xB8, 0x46, 0x00, 0x00, 0x00, NOP, NOP, INT3, RETN];
+        // 0xB8, 0x46, 0x00, 0x00, 0x00 is writing 0x46 to EAX
+        let buffer = vec![0xB8, 0x46, 0x00, 0x00, 0x00, NOP, NOP, RETN];
         Ok(CompiledCode {
             buffer,
             // Size of stack frame, in bytes.
-            frame_size,
+            // frame_size,
         })
     }
 }
