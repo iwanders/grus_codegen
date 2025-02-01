@@ -1,7 +1,25 @@
-test compile
+test run
 target x86_64
-function %constant_i64() -> i64 system_v {
-  block0:
-    v3 = iconst.i64 42
-    return v3
+
+; crop from wasmtime/cranelift/filetests/filetests/runtests/const.clif
+
+function %i8_iconst_0() -> i8 {
+block0:
+    v1 = iconst.i8 0
+    return v1
 }
+; run: %i8_iconst_0() == 0
+
+function %i8_iconst_1() -> i8 {
+block0:
+    v1 = iconst.i8 1
+    return v1
+}
+; run: %i8_iconst_1() == 1
+
+function %i8_iconst_neg_one() -> i8 {
+block0:
+    v1 = iconst.i8 -1
+    return v1
+}
+; run: %i8_iconst_neg_one() == -1
