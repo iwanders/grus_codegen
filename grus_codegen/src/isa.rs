@@ -1,9 +1,55 @@
 use cranelift_codegen::ir::{Function, InstructionData};
 use cranelift_codegen::CodegenResult;
 
+use log::*;
 use target_lexicon::Triple;
 
-use log::*;
+/*
+
+    253665-sdm-vol-1-dec-24.pdf:
+        3.2.1: 64 bit mode execution; 16 general purpose registers.
+        3.4.1, p73;
+            General purpose registers are able to work with 32 bit and 64 bit operands.
+
+            p75;
+             8 bit           AL,  BL,  CL,  DL,  SIL, DIL, BPL, and SPL, R8B-R15B
+            16 bit           AX,  BX,  CX,  DX,  SI,  DI,  BP, and  SP, R8W-R15W
+            32 bit operand: EAX, EBX, ECX, EDX, ESI, EDI, EBP, and ESP, R8D-R15D
+            64 bit operand: RAX, RBX, RCX, RDX, RSI, RDI, RBP, and RSP, R8 - R15
+
+            p74;
+            EAX - Accumulator for operands and results data.
+            EBX - Pointer to data in the DS segment.
+            ECX - Counter for string and loop operations.
+            EDX - I/O pointer.
+
+            ESI - Pointer to data in the segment pointed to by the DS register; source pointer for string operations.
+            EDI - Pointer to data (or destination) in the segment pointed to by the ES register;
+                  destination pointer for string operations.
+            ESP - Stack pointer (in the SS segment).
+            EBP - Pointer to data on the stack (in the SS segment).
+
+            64 bit registers; quadword
+            32 bit registers; doubleword
+            16 bit registers: word registers
+             8 bit register: byte registers.
+            oh, see also 4.1, p87
+
+            EFLAGS is a special flag register that affects 'things'... see p78
+
+            3.5, p80 describes instruction pointer.
+
+            3.7, p82 describes operand addressing.
+
+            3.7.5, p84 has displacement / offset specification information.
+
+            4.2, up to p92 contains integer & float sizes and definitions.
+
+            4.7, p 95... something called a binary-coded decimal integer.
+
+            5.1, start of general purpose instructions.
+
+*/
 
 #[derive(Debug)]
 pub struct X86Isa {
@@ -89,11 +135,10 @@ impl X86Isa {
                     instdata.typevar_operand(&dfg.value_lists)
                 );
                 let arguments = instdata.arguments(&dfg.value_lists);
-                // arguments[0] + 3;
                 debug!("  args: {:?}", arguments);
                 debug!("  opcode: {:?}", instdata.opcode());
                 debug!(
-                    "  result: {:?} into {:?} ",
+                    "  results? {:?} -> {:?} ",
                     dfg.has_results(inst),
                     dfg.inst_results(inst)
                 );
