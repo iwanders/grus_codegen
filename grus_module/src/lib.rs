@@ -30,7 +30,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 pub struct JitModule {
     module: ObjectModule,
-    memory: Arc<Pin<Vec<u8>>>,
+    memory: Arc<memmap::Mmap>,
 }
 
 impl JitModule {
@@ -50,16 +50,16 @@ impl JitModule {
 
         for s in elf.symbols() {
             if s.name() == Ok(name) {
-                // println!("s: {s:?}");
-                // println!("address: {:?}", s.address());
-                // println!("size: {:?}", s.size());
-                // println!("section: {:?}", s.section());
+                println!("s: {s:?}");
+                println!("address: {:?}", s.address());
+                println!("size: {:?}", s.size());
+                println!("section: {:?}", s.section());
 
                 let section_id = s.section_index()?;
-                // println!("section_id: {:?}", section_id);
+                println!("section_id: {:?}", section_id);
                 let section = elf.section_by_index(section_id).ok()?;
                 let section_data = section.data().ok()?;
-                // println!("section_data: {:?}", section_data);
+                println!("section_data: {:?}", section_data);
                 let address = s.address() as usize;
                 return Some(&section_data[address] as *const u8);
             }
@@ -156,10 +156,13 @@ impl ObjectModule {
         self.object.write()
     }
 
-    pub fn jit(self) -> Result<JitModule, object::read::Error> {
+    pub fn jit(self) -> Result<JitModule, anyhow::Error> {
+        use std::io::Write;
         let data = self.object.write().expect("failed to write file");
-        let pinned = Pin::new(data);
-        let pointered = Arc::new(pinned);
+        let mut memory = memmap::MmapMut::map_anon(data.len())?;
+        (&mut memory[..]).write_all(&data)?;
+        let exec_area = memory.make_exec()?;
+        let pointered = Arc::new(exec_area);
         Ok(JitModule {
             module: self,
             memory: pointered,

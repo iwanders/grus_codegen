@@ -35,6 +35,11 @@ pub fn process_test_file(test_file: &TestFile) -> Result<()> {
             .context(format!("could not find function"))?;
         println!("p: {p:?}");
 
+        unsafe {
+            let z = std::slice::from_raw_parts(p, 5);
+            println!("z: {z:x?}");
+        }
+
         // Okay, so we now have a pointer p, that contains our actual function.
         // next is setting up the registers... and performing the jump there.
         // Cranelift's make_trampoline looks complex, but what it really does is load values from
@@ -48,7 +53,7 @@ pub fn process_test_file(test_file: &TestFile) -> Result<()> {
             unsafe {
                 asm!(
                     "call {p}",
-                    "ret",
+                    // "ret",
                     // x = inout(reg) x,
                     p = in(reg) p,
                 );
@@ -68,6 +73,7 @@ pub fn process_test_file(test_file: &TestFile) -> Result<()> {
                     // lets goooo!
                     let trampo = &fun_trampolines[i];
                     let res = (*trampo)();
+                    println!("result: {res:?}");
                 }
             }
         }

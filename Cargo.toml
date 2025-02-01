@@ -32,6 +32,7 @@ cranelift-module = "0.116.1"
 cranelift-jit = "0.116.1"
 
 
+object = "0.36.7"
 
 cranelift-codegen = {version="0.116.1", features=["x86", "arm64"]}
 

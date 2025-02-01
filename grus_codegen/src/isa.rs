@@ -36,7 +36,8 @@ impl X86Isa {
         // let buffer = cranelift_codegen::MachBuffer::<cranelift_codegen::machineinst::Stencil>::new();
         const NOP: u8 = 0x90;
         const RETN: u8 = 0xc3;
-        let buffer = vec![NOP, NOP, NOP, RETN];
+        const INT3: u8 = 0xcc;
+        let buffer = vec![NOP, NOP, INT3, RETN];
         Ok(CompiledCode {
             buffer,
             // Size of stack frame, in bytes.
