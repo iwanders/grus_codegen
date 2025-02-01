@@ -35,12 +35,12 @@ pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
         let p = jit_module
             .get_fun(&funids[i])
             .context(format!("could not find function"))?;
-        println!("p: {p:?}");
+        // println!("p: {p:?}");
 
-        unsafe {
-            let z = std::slice::from_raw_parts(p, 5);
-            println!("z: {z:x?}");
-        }
+        // unsafe {
+        // let z = std::slice::from_raw_parts(p, 5);
+        // println!("z: {z:x?}");
+        // }
 
         // Okay, so we now have a pointer p, that contains our actual function.
         // next is setting up the registers... and performing the jump there.
@@ -82,6 +82,7 @@ pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
                     trace!("args: {args:?}");
                     // lets goooo!
                     let trampo = &fun_trampolines[i];
+                    trace!("Invoking the trampoline... 🤞");
                     let res = (*trampo)();
                     trace!("result: {res:?}");
 
