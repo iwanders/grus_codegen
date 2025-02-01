@@ -1,5 +1,3 @@
-// This is definitely butchered from
-// https://github.com/bytecodealliance/wasmtime/blob/af3c0290680aca2fe158c2743f63fd3bedda83df/cranelift/object/src/backend.rs
 use object::write::{Object, StandardSection, Symbol, SymbolId, SymbolSection};
 use object::{SymbolFlags, SymbolKind, SymbolScope};
 // Relocation, SectionId,
@@ -18,12 +16,6 @@ fn translate_linkage(linkage: Linkage) -> (SymbolScope, bool) {
     // TODO: this matches rustc_codegen_cranelift, but may be wrong.
     let weak = linkage == Linkage::Preemptible;
     (scope, weak)
-}
-
-pub struct ObjectModule {
-    object: Object<'static>,
-    functions: std::collections::HashMap<FuncId, Option<(SymbolId, bool)>>,
-    declarations: ModuleDeclarations,
 }
 
 use std::pin::Pin;
@@ -69,6 +61,13 @@ impl JitModule {
     }
 }
 
+// This is definitely butchered from
+// https://github.com/bytecodealliance/wasmtime/blob/af3c0290680aca2fe158c2743f63fd3bedda83df/cranelift/object/src/backend.rs
+pub struct ObjectModule {
+    object: Object<'static>,
+    functions: std::collections::HashMap<FuncId, Option<(SymbolId, bool)>>,
+    declarations: ModuleDeclarations,
+}
 impl ObjectModule {
     pub fn new() -> Self {
         let binary_format = object::BinaryFormat::Elf;
