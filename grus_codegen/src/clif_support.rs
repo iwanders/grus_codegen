@@ -16,7 +16,7 @@ use cranelift_reader::{Comparison, TestFile};
 use grus_module::{Linkage, ObjectModule};
 use log::{info, trace, warn};
 
-pub fn process_test_file(test_file: &TestFile) -> Result<()> {
+pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
     // First, compile all functions.
     let isa = crate::X86Isa::new();
 
@@ -114,16 +114,20 @@ pub fn process_test_file(test_file: &TestFile) -> Result<()> {
 
     if count_failures != 0 {
         warn!("Failures: {count_failures}");
+        info!("Success: {count_success}");
+        return Ok(false);
+    } else {
+        info!("Success: {count_success}");
+        return Ok(true);
     }
-
-    Ok(())
 }
 
-pub fn test_files<P: AsRef<std::path::Path> + std::fmt::Debug>(files: &[P]) -> Result<()> {
+pub fn test_files<P: AsRef<std::path::Path> + std::fmt::Debug>(files: &[P]) -> Result<bool> {
+    let mut all_passed = true;
     for f in files {
         let f = std::fs::read_to_string(&f).context(format!("failed to open {f:?}"))?;
         let test_file = cranelift_reader::parse_test(&f, Default::default())?;
-        process_test_file(&test_file)?;
+        all_passed &= process_test_file(&test_file)?;
     }
-    Ok(())
+    Ok(all_passed)
 }
