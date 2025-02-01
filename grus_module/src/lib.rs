@@ -3,6 +3,7 @@ use object::{SymbolFlags, SymbolKind, SymbolScope};
 // Relocation, SectionId,
 use cranelift_codegen::ir;
 use cranelift_module::{FuncId, ModuleDeclarations, ModuleError, ModuleResult};
+use log::{trace, warn};
 
 pub use cranelift_module::Linkage;
 
@@ -30,7 +31,7 @@ impl JitModule {
         let decl = self.module.declarations.get_function_decl(*func_id);
 
         let name = decl.name.as_ref()?;
-        println!("name: {name:?}");
+        trace!("name: {name:?}");
 
         use object::{Object, ObjectSection, ObjectSymbol};
         let elf =
@@ -42,16 +43,16 @@ impl JitModule {
 
         for s in elf.symbols() {
             if s.name() == Ok(name) {
-                println!("s: {s:?}");
-                println!("address: {:?}", s.address());
-                println!("size: {:?}", s.size());
-                println!("section: {:?}", s.section());
+                trace!("s: {s:?}");
+                trace!("address: {:?}", s.address());
+                trace!("size: {:?}", s.size());
+                trace!("section: {:?}", s.section());
 
                 let section_id = s.section_index()?;
-                println!("section_id: {:?}", section_id);
+                trace!("section_id: {:?}", section_id);
                 let section = elf.section_by_index(section_id).ok()?;
                 let section_data = section.data().ok()?;
-                println!("section_data: {:?}", section_data);
+                trace!("section_data: {:?}", section_data);
                 let address = s.address() as usize;
                 return Some(&section_data[address] as *const u8);
             }

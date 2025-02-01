@@ -21,6 +21,9 @@ use anyhow::Result;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    // env_logger::init();
+    use env_logger::Env;
+    env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
     match &cli.command {
         Commands::Test { files } => {

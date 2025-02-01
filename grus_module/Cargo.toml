@@ -16,3 +16,5 @@ cranelift-codegen = "0.116.1"
 
 
 anyhow = {workspace=true}
+
+log = { workspace = true }

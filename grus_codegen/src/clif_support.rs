@@ -74,6 +74,8 @@ pub fn process_test_file(test_file: &TestFile) -> Result<()> {
                     let trampo = &fun_trampolines[i];
                     let res = (*trampo)();
                     println!("result: {res:?}");
+                } else {
+                    todo!()
                 }
             }
         }
