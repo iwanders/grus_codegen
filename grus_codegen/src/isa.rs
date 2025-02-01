@@ -1,4 +1,4 @@
-use cranelift_codegen::ir::Function;
+use cranelift_codegen::ir::{Function, InstructionData};
 use cranelift_codegen::CodegenResult;
 
 use target_lexicon::Triple;
@@ -67,16 +67,49 @@ impl X86Isa {
 
         The layout of blocks in the function and of instructions in each block is recorded by the
         Layout data structure which forms the other half of the function representation.
+
+        https://docs.rs/cranelift-codegen/0.116.1/cranelift_codegen/ir/instructions/enum.InstructionData.html
         */
 
         let dfg = &stencil.dfg;
-        for b in stencil.layout.blocks() {
+        let layout = &stencil.layout;
+        for b in layout.blocks() {
             debug!("b: {b:?}");
             let block_data = &dfg.blocks[b];
             debug!(
                 "block_data params: {:?}",
                 block_data.params(&dfg.value_lists)
             );
+            for inst in layout.block_insts(b) {
+                debug!("inst: {inst:?}");
+                let instdata = dfg.insts[inst];
+                debug!("  instruction_data: {instdata:?}");
+                debug!(
+                    "  typevar_operand: {:?}",
+                    instdata.typevar_operand(&dfg.value_lists)
+                );
+                let arguments = instdata.arguments(&dfg.value_lists);
+                // arguments[0] + 3;
+                debug!("  args: {:?}", arguments);
+                debug!("  opcode: {:?}", instdata.opcode());
+                debug!(
+                    "  result: {:?} into {:?} ",
+                    dfg.has_results(inst),
+                    dfg.inst_results(inst)
+                );
+                match instdata {
+                    InstructionData::UnaryImm { opcode, imm } => {
+                        // How do we know where this goes..
+                        // Line is `v1 = iconst.i8 0` in the clif... how do we get the Value of v1?
+                    }
+                    _ => todo!(
+                        "unimplemented: {:?} in {:?}, of {:?}",
+                        instdata,
+                        b,
+                        func.name
+                    ),
+                }
+            }
         }
 
         const NOP: u8 = 0x90;
