@@ -7,11 +7,6 @@ use cranelift_codegen::ir;
 use cranelift_module::{FuncId, ModuleDeclarations, ModuleError, ModuleResult};
 
 pub use cranelift_module::Linkage;
-pub struct ObjectModule {
-    object: Object<'static>,
-    functions: std::collections::HashMap<FuncId, Option<(SymbolId, bool)>>,
-    declarations: ModuleDeclarations,
-}
 
 fn translate_linkage(linkage: Linkage) -> (SymbolScope, bool) {
     let scope = match linkage {
@@ -25,6 +20,55 @@ fn translate_linkage(linkage: Linkage) -> (SymbolScope, bool) {
     (scope, weak)
 }
 
+pub struct ObjectModule {
+    object: Object<'static>,
+    functions: std::collections::HashMap<FuncId, Option<(SymbolId, bool)>>,
+    declarations: ModuleDeclarations,
+}
+
+use std::pin::Pin;
+use std::sync::Arc;
+pub struct JitModule {
+    module: ObjectModule,
+    memory: Arc<Pin<Vec<u8>>>,
+}
+
+impl JitModule {
+    pub fn get_fun(&self, func_id: &FuncId) -> Option<*const u8> {
+        let decl = self.module.declarations.get_function_decl(*func_id);
+
+        let name = decl.name.as_ref()?;
+        println!("name: {name:?}");
+
+        use object::{Object, ObjectSection, ObjectSymbol};
+        let elf =
+            if let object::read::File::Elf64(elf) = object::File::parse(&**self.memory).ok()? {
+                elf
+            } else {
+                return None;
+            };
+
+        for s in elf.symbols() {
+            if s.name() == Ok(name) {
+                // println!("s: {s:?}");
+                // println!("address: {:?}", s.address());
+                // println!("size: {:?}", s.size());
+                // println!("section: {:?}", s.section());
+
+                let section_id = s.section_index()?;
+                // println!("section_id: {:?}", section_id);
+                let section = elf.section_by_index(section_id).ok()?;
+                let section_data = section.data().ok()?;
+                // println!("section_data: {:?}", section_data);
+                let address = s.address() as usize;
+                return Some(&section_data[address] as *const u8);
+            }
+        }
+
+        panic!("could not find the right symbol")
+    }
+}
+
 impl ObjectModule {
     pub fn new() -> Self {
         let binary_format = object::BinaryFormat::Elf;
@@ -35,6 +79,15 @@ impl ObjectModule {
             functions: Default::default(),
             declarations: Default::default(),
         }
+    }
+
+    pub fn declare_named_function(
+        &mut self,
+        linkage: Linkage,
+        fun: &ir::Function,
+    ) -> ModuleResult<FuncId> {
+        let name = format!("{}", fun.name);
+        self.declare_function(&name, linkage, &fun.signature)
     }
 
     pub fn declare_function(
@@ -101,5 +154,15 @@ impl ObjectModule {
 
     pub fn finish(self) -> Result<Vec<u8>, object::write::Error> {
         self.object.write()
+    }
+
+    pub fn jit(self) -> Result<JitModule, object::read::Error> {
+        let data = self.object.write().expect("failed to write file");
+        let pinned = Pin::new(data);
+        let pointered = Arc::new(pinned);
+        Ok(JitModule {
+            module: self,
+            memory: pointered,
+        })
     }
 }
