@@ -5,7 +5,7 @@ edition = "2021"
 license = "Apache-2.0 WITH LLVM-exception"
 
 [dependencies]
-grus_codegen = {workspace = true}
+
 
 object = "0.36.7"
 
