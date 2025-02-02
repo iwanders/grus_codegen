@@ -60,6 +60,14 @@ impl JitModule {
 
         panic!("could not find the right symbol")
     }
+
+    pub fn write<P: Into<std::path::PathBuf>>(&self, p: P) -> Result<(), anyhow::Error> {
+        let p: std::path::PathBuf = p.into();
+        // todo!()
+        let bytes = self.module.object.write()?;
+        std::fs::write(p, bytes)?;
+        Ok(())
+    }
 }
 
 // This is definitely butchered from
