@@ -100,13 +100,17 @@ impl X86Isa {
                     "  typevar_operand: {:?}",
                     instdata.typevar_operand(&dfg.value_lists)
                 );
-                let arguments = instdata.arguments(&dfg.value_lists);
-                debug!("  args: {:?}", arguments);
                 debug!("  opcode: {:?}", instdata.opcode());
+                let arguments = instdata.arguments(&dfg.value_lists);
+                let types_of =
+                    |v: &[ir::Value]| v.iter().map(|z| dfg.value_type(*z)).collect::<Vec<_>>();
+                debug!("  args: {:?} types: {:?}", arguments, types_of(&arguments));
+
                 debug!(
-                    "  results? {:?} -> {:?} ",
+                    "  results? {:?} -> {:?}  (types: {:?}) ",
                     dfg.has_results(inst),
-                    dfg.inst_results(inst)
+                    dfg.inst_results(inst),
+                    types_of(&dfg.inst_results(inst))
                 );
                 // We also don't have the types here... do WE have to propagate those?
                 match instdata {
@@ -144,8 +148,23 @@ impl X86Isa {
                             func.name
                         ),
                     },
+                    InstructionData::Binary { opcode, args } => {
+                        match opcode {
+                            ir::Opcode::Iadd => {
+                                // let xinst = x86::Instruction::op_0(&[0xc3]);
+                                // buffer.append(&mut xinst.serialize()?);
+                                todo!();
+                            }
+                            _ => todo!(
+                                "unimplemented opcode: {:?} in {:?}, of {:?}",
+                                opcode,
+                                b,
+                                func.name
+                            ),
+                        }
+                    }
                     _ => todo!(
-                        "unimplemented: {:?} in {:?}, of {:?}",
+                        "unimplemented instructiondata: {:?} in {:?}, of {:?}",
                         instdata,
                         b,
                         func.name
