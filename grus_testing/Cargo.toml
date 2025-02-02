@@ -1,0 +1,21 @@
+[package]
+name = "grus_testing"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 WITH LLVM-exception"
+
+[dependencies]
+
+walkdir = "2.5.0"
+
+
+
+grus_codegen =  {workspace = true}
+cranelift-module =  {workspace = true}
+cranelift-object =  {workspace = true}
+cranelift-codegen =  {workspace = true}
+
+
+anyhow = {workspace=true}
+
+log = { workspace = true }

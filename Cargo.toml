@@ -4,11 +4,13 @@ resolver = "2"
 members = [
     "grus_codegen",
     "grus_module",
+    "grus_testing",
 ]
 
 [workspace.dependencies]
 grus_codegen = { path = "grus_codegen", default-features = false }
 grus_module = { path = "grus_module", default-features = false }
+grus_testing = { path = "grus_testing", default-features = false }
 
 
 
