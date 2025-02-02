@@ -1,55 +1,18 @@
-use cranelift_codegen::ir::{Function, InstructionData};
+use cranelift_codegen::ir::{self, Function, InstructionData};
 use cranelift_codegen::CodegenResult;
 
 use log::*;
 use target_lexicon::Triple;
 
-/*
-
-    253665-sdm-vol-1-dec-24.pdf:
-        3.2.1: 64 bit mode execution; 16 general purpose registers.
-        3.4.1, p73;
-            General purpose registers are able to work with 32 bit and 64 bit operands.
-
-            p75;
-             8 bit           AL,  BL,  CL,  DL,  SIL, DIL, BPL, and SPL, R8B-R15B
-            16 bit           AX,  BX,  CX,  DX,  SI,  DI,  BP, and  SP, R8W-R15W
-            32 bit operand: EAX, EBX, ECX, EDX, ESI, EDI, EBP, and ESP, R8D-R15D
-            64 bit operand: RAX, RBX, RCX, RDX, RSI, RDI, RBP, and RSP, R8 - R15
-
-            p74;
-            EAX - Accumulator for operands and results data.
-            EBX - Pointer to data in the DS segment.
-            ECX - Counter for string and loop operations.
-            EDX - I/O pointer.
-
-            ESI - Pointer to data in the segment pointed to by the DS register; source pointer for string operations.
-            EDI - Pointer to data (or destination) in the segment pointed to by the ES register;
-                  destination pointer for string operations.
-            ESP - Stack pointer (in the SS segment).
-            EBP - Pointer to data on the stack (in the SS segment).
-
-            64 bit registers; quadword
-            32 bit registers; doubleword
-            16 bit registers: word registers
-             8 bit register: byte registers.
-            oh, see also 4.1, p87
-
-            EFLAGS is a special flag register that affects 'things'... see p78
-
-            3.5, p80 describes instruction pointer.
-
-            3.7, p82 describes operand addressing.
-
-            3.7.5, p84 has displacement / offset specification information.
-
-            4.2, up to p92 contains integer & float sizes and definitions.
-
-            4.7, p 95... something called a binary-coded decimal integer.
-
-            5.1, start of general purpose instructions.
-
-*/
+use thiserror::Error;
+#[derive(Error, Debug)]
+pub enum CodegenError {
+    #[error("Register invalid: {reason} in {operand:?}")]
+    InvalidOperand {
+        reason: String,
+        operand: x86::Operand,
+    },
+}
 
 #[derive(Debug)]
 pub struct X86Isa {
@@ -78,7 +41,7 @@ impl X86Isa {
         &self.triple
     }
 
-    pub fn compile_function(&self, func: &Function) -> CodegenResult<CompiledCode> {
+    pub fn compile_function(&self, func: &Function) -> Result<CompiledCode, CodegenError> {
         let _ = func;
 
         // Okay, so now we get a stencil, that has a dfg, and we need to output instructions for that.
@@ -119,6 +82,9 @@ impl X86Isa {
 
         let dfg = &stencil.dfg;
         let layout = &stencil.layout;
+
+        let mut buffer = vec![];
+
         for b in layout.blocks() {
             debug!("b: {b:?}");
             let block_data = &dfg.blocks[b];
@@ -142,11 +108,42 @@ impl X86Isa {
                     dfg.has_results(inst),
                     dfg.inst_results(inst)
                 );
+                // We also don't have the types here... do WE have to propagate those?
                 match instdata {
                     InstructionData::UnaryImm { opcode, imm } => {
                         // How do we know where this goes..
                         // Line is `v1 = iconst.i8 0` in the clif... how do we get the Value of v1?
+                        // Immediate to register, p2487
+                        match opcode {
+                            ir::Opcode::Iconst => {
+                                // 0b1011W000  W is 64??
+                                let xinst = x86::Instruction::op_1(
+                                    &[0b10111000],
+                                    x86::Operand::Reg(x86::Reg(0)),
+                                )
+                                .with_immediate(x86::Operand::Immediate(imm));
+                                buffer.append(&mut xinst.serialize()?);
+                            }
+                            _ => todo!(
+                                "unimplemented opcode: {:?} in {:?}, of {:?}",
+                                opcode,
+                                b,
+                                func.name
+                            ),
+                        }
                     }
+                    InstructionData::MultiAry { opcode, args } => match opcode {
+                        ir::Opcode::Return => {
+                            let xinst = x86::Instruction::op_0(&[0xc3]);
+                            buffer.append(&mut xinst.serialize()?);
+                        }
+                        _ => todo!(
+                            "unimplemented opcode: {:?} in {:?}, of {:?}",
+                            opcode,
+                            b,
+                            func.name
+                        ),
+                    },
                     _ => todo!(
                         "unimplemented: {:?} in {:?}, of {:?}",
                         instdata,
@@ -156,17 +153,188 @@ impl X86Isa {
                 }
             }
         }
+        warn!("buffer: {buffer:x?}");
 
-        const NOP: u8 = 0x90;
-        const RETN: u8 = 0xc3;
-        const INT3: u8 = 0xcc;
+        // const NOP: u8 = 0x90;
+        // const RETN: u8 = 0xc3;
+        // const INT3: u8 = 0xcc;
         // let buffer = vec![0xB8, 0x46, 0x00, 0x00, 0x00, NOP, NOP, INT3, RETN];
         // 0xB8, 0x46, 0x00, 0x00, 0x00 is writing 0x46 to EAX
-        let buffer = vec![0xB8, 0x46, 0x00, 0x00, 0x00, NOP, NOP, RETN];
+        // let buffer = vec![0xB8, 0x46, 0x00, 0x00, 0x00, NOP, NOP, RETN];
         Ok(CompiledCode {
             buffer,
             // Size of stack frame, in bytes.
             // frame_size,
         })
+    }
+}
+
+mod x86 {
+    use super::*;
+    use cranelift::prelude::Imm64;
+    /*
+    echo "0x0f 0x28 0x44 0xd8 0x10" | llvm-mc-13  -disassemble -triple=x86_64 -output-asm-variant=1
+    echo "0x48 0xb8 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11" | llvm-mc-13  -disassemble -triple=x86_64 -output-asm-variant=1
+
+    325383-sdm-vol-2abcd-dec-24.pdf
+        p 39. contains REX & ModRM Byte diagram.
+
+        p35 DI & SI appears to be special in 16 bit... lets just ignore that?
+    */
+    #[derive(Debug, Copy, Clone)]
+    pub struct Reg(pub u8);
+
+    #[derive(Debug, Copy, Clone)]
+    pub enum Operand {
+        /// A direct register.
+        Reg(Reg),
+        Immediate(Imm64),
+        // TODO: Magic stuff [EAX] and [--][--], page 36.
+    }
+    #[derive(Debug, Copy, Clone)]
+    pub enum Operands {
+        None,
+        Unary(Operand),
+        Binary(Operand, Operand),
+    }
+
+    #[derive(Debug, Copy, Clone)]
+    pub struct Opcode(pub [Option<u8>; 3]);
+    impl Opcode {
+        pub fn from(s: &[u8]) -> Self {
+            let mut r: [Option<u8>; 3] = Default::default();
+            for (i, v) in s.iter().enumerate() {
+                r[i] = Some(*v)
+            }
+
+            Self(r)
+        }
+
+        pub fn serialize(&self) -> Vec<u8> {
+            let mut v: Vec<u8> = Vec::with_capacity(2);
+            for s in self.0.iter() {
+                if let Some(o) = s {
+                    v.push(*o);
+                }
+            }
+            v
+        }
+        pub fn serialize_with(&self, lower: u8) -> Vec<u8> {
+            let mut v: Vec<u8> = Vec::with_capacity(2);
+            for (i, s) in self.0.iter().enumerate() {
+                if let Some(o) = s {
+                    let addition = if self.0.get(i + 1).is_none() {
+                        lower
+                    } else {
+                        0
+                    };
+                    v.push(*o | lower);
+                }
+            }
+            v
+        }
+    }
+
+    #[derive(Debug, Copy, Clone)]
+    pub struct Instruction {
+        pub opcode: Opcode,
+        pub operands: Operands,
+        pub displacement: Option<Operand>,
+        pub immediate: Option<Operand>,
+    }
+    impl Instruction {
+        pub fn op_0(opcode: &[u8]) -> Self {
+            Self {
+                opcode: Opcode::from(opcode),
+                operands: Operands::None,
+                displacement: None,
+                immediate: None,
+            }
+        }
+        pub fn op_1(opcode: &[u8], operand: Operand) -> Self {
+            Self {
+                opcode: Opcode::from(opcode),
+                operands: Operands::Unary(operand),
+                displacement: None,
+                immediate: None,
+            }
+        }
+
+        pub fn op_2(opcode: &[u8], operand1: Operand, operand2: Operand) -> Self {
+            Self {
+                opcode: Opcode::from(opcode),
+                operands: Operands::Binary(operand1, operand2),
+                displacement: None,
+                immediate: None,
+            }
+        }
+
+        pub fn with_immediate(self, immediate: Operand) -> Self {
+            Self {
+                immediate: Some(immediate),
+                ..self
+            }
+        }
+        // Seriously inefficient
+        pub fn serialize(&self) -> Result<Vec<u8>, CodegenError> {
+            /*
+                rex is 0b0100WR0B
+                    w: 0=operand size by CS.D, 1 is 64 bit., whatever that may mean.
+                    R: Extension of the ModRM reg field.
+                    X: Extension of the SIB index field.
+                    B: Extension of the ModRM r/m field, SIB base field, or Opcode reg field.
+                See page 39, fig 2-4, 2-5, 2-6...
+                There's 4 flavours;
+                    fig 2.4: Memory without SIB
+                    fig 2.5: Register-register, no memory.
+                    fig 2.6: Memory with SIB
+                    fig 2.7: Register operand coded in opcode byte.
+            */
+            let mut rex: u8 = 0b0100 << 4;
+            let mut v = vec![];
+            let mut opcode_bytes = vec![];
+            match &self.operands {
+                Operands::None => {
+                    opcode_bytes = self.opcode.serialize();
+                }
+                Operands::Unary(operand) => {
+                    match operand {
+                        Operand::Reg(r) => {
+                            if r.0 > 0b1111 {
+                                return Err(CodegenError::InvalidOperand {
+                                    reason: "register index too large".to_owned(),
+                                    operand: *operand,
+                                }
+                                .into());
+                            }
+                            let top = (r.0 & 0b1111) >> 3;
+                            rex |= top;
+                            rex |= 0b1000;
+                            let bottom = r.0 & 0b111;
+                            // This goes into the opcode, somehow.
+                            opcode_bytes = self.opcode.serialize_with(bottom);
+                            v.push(rex);
+                        }
+                        Operand::Immediate(_v) => {}
+                    }
+                }
+                Operands::Binary(..) => {
+                    todo!()
+                }
+            }
+            // let mut v = vec![rex];
+            warn!("rex: {rex:x?}");
+            v.append(&mut opcode_bytes);
+            if let Some(immediate) = self.immediate {
+                match immediate {
+                    Operand::Immediate(imm) => {
+                        let vi64 = imm.bits();
+                        v.extend(vi64.to_le_bytes());
+                    }
+                    _ => todo!(),
+                }
+            }
+            Ok(v)
+        }
     }
 }

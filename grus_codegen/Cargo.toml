@@ -18,6 +18,7 @@ anyhow = {workspace=true}
 grus_module = {workspace=true}
 
 log = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 cranelift-native = {workspace = true}

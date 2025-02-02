@@ -29,6 +29,7 @@ pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
         funids.push(id);
     }
     let jit_module = module.jit()?;
+    jit_module.write("/tmp/foo.o")?;
 
     let mut fun_trampolines: Vec<Box<dyn Fn() -> u64>> = vec![];
     for (i, (fun, _detail)) in test_file.functions.iter().enumerate() {
