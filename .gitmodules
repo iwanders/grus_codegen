@@ -1,3 +1,0 @@
-[submodule "grus_testing/upstream/wasmtime"]
-	path = grus_testing/upstream/wasmtime
-	url = https://github.com/bytecodealliance/wasmtime.git

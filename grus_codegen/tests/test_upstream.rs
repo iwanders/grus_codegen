@@ -17,3 +17,20 @@ pub fn crawl_dir<P: Into<std::path::PathBuf>>(
     }
     Ok(v)
 }
+
+#[test]
+fn test_upstream() -> Result<(), anyhow::Error> {
+    let mut d = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    d.push("..");
+    d.push("filetests");
+    d.push("upstream");
+    // d.push("filetests");
+
+    let files = crawl_dir(d)?;
+    println!("files: {files:#?}");
+    let res = grus_codegen::clif_support::test_files(&files)?;
+    assert!(res);
+    println!("res: {res:#?}");
+
+    Ok(())
+}

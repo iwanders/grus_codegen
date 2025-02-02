@@ -411,6 +411,7 @@ dependencies = [
  "log",
  "target-lexicon",
  "thiserror",
+ "walkdir",
 ]
 
 [[package]]
@@ -424,19 +425,6 @@ dependencies = [
  "log",
  "memmap",
  "object",
-]
-
-[[package]]
-name = "grus_testing"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cranelift-codegen",
- "cranelift-module",
- "cranelift-object",
- "grus_codegen",
- "log",
- "walkdir",
 ]
 
 [[package]]
