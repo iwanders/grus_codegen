@@ -8,4 +8,4 @@ Naming is hard, [Grus grus](https://en.wikipedia.org/wiki/Common_crane) is the c
 # License
 License is [`Apache-2.0 WITH LLVM-exception`](./LICENSE), similar to cranelift.
 
-[cranelift](https://cranelift.dev/)
+[cranelift]: https://cranelift.dev/
