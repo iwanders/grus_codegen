@@ -20,6 +20,10 @@ grus_module = {workspace=true}
 log = { workspace = true }
 thiserror = { workspace = true }
 
+#smallvec = { workspace = true }
+arrayvec = { workspace = true }
+
+#############################################################
 [dev-dependencies]
 cranelift-native = {workspace = true}
 cranelift-object =  {workspace = true}

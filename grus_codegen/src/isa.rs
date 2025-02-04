@@ -114,11 +114,10 @@ impl X86Isa {
                         match opcode {
                             ir::Opcode::Iconst => {
                                 // 0b1011W000  W is 64??
-                                let xinst = cg::Instruction::op_1(
-                                    &[0b10111000],
-                                    cg::Operand::Reg(cg::Reg(0)),
-                                )
-                                .with_immediate(cg::Operand::Immediate(imm));
+                                let xinst = cg::Instruction::op(
+                                    cg::Op::Mov,
+                                    &[cg::Operand::Reg(cg::Reg::RAX), cg::Operand::Immediate(imm)],
+                                );
                                 buffer.append(&mut xinst.serialize()?);
                             }
                             _ => todo!(
@@ -129,18 +128,22 @@ impl X86Isa {
                             ),
                         }
                     }
-                    InstructionData::MultiAry { opcode, args } => match opcode {
-                        ir::Opcode::Return => {
-                            let xinst = cg::Instruction::op_0(&[0xc3]);
-                            buffer.append(&mut xinst.serialize()?);
+                    InstructionData::MultiAry { opcode, args } => {
+                        match opcode {
+                            ir::Opcode::Return => {
+                                // let xinst = cg::Instruction::op_0(&[0xc3]);
+                                // buffer.append(&mut xinst.serialize()?);
+                                const RETN: u8 = 0xc3;
+                                buffer.push(RETN);
+                            }
+                            _ => todo!(
+                                "unimplemented opcode: {:?} in {:?}, of {:?}",
+                                opcode,
+                                b,
+                                func.name
+                            ),
                         }
-                        _ => todo!(
-                            "unimplemented opcode: {:?} in {:?}, of {:?}",
-                            opcode,
-                            b,
-                            func.name
-                        ),
-                    },
+                    }
                     InstructionData::Binary { opcode, args } => {
                         match opcode {
                             ir::Opcode::Iadd => {

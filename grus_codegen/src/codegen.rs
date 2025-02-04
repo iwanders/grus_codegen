@@ -1,5 +1,9 @@
 use cranelift::prelude::Imm64;
 use log::warn;
+// use smallvec::{SmallVec, ToSmallVec};
+use arrayvec::ArrayVec;
+
+use thiserror::Error;
 
 /*
 echo "0x0f 0x28 0x44 0xd8 0x10" | llvm-mc-13  -disassemble -triple=x86_64 -output-asm-variant=1
@@ -11,20 +15,37 @@ echo "0x48 0xb8 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11" | llvm-mc-13  -disassem
     p35 DI & SI appears to be special in 16 bit... lets just ignore that?
 */
 
+type OperandRange = std::ops::RangeInclusive<usize>;
+
+#[derive(Error, Debug)]
+pub enum CodegenError {
+    #[error("register invalid: {reg:?}")]
+    InvalidRegister { reg: Reg },
+    #[error("invalid operand count: got {got} expected {expected:?}")]
+    InvalidOperandCount { got: usize, expected: OperandRange },
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum Op {
     Mov,
 }
 
-use thiserror::Error;
-#[derive(Error, Debug)]
-pub enum CodegenError {
-    #[error("Register invalid: {reason} in {operand:?}")]
-    InvalidOperand { reason: String, operand: Operand },
+impl Op {
+    pub fn operand_range(&self) -> OperandRange {
+        match self {
+            Op::Mov => 2..=2,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct Reg(pub u8);
+pub struct Reg(u8);
+impl Reg {
+    pub const RAX: Reg = Reg(0);
+    pub fn index(&self) -> u8 {
+        self.0
+    }
+}
 
 #[derive(Debug, Copy, Clone)]
 pub enum Operand {
@@ -36,91 +57,70 @@ pub enum Operand {
     // Memory(Reg)?
     // MemoryOffset(RegBase, RegOffset)?
 }
-#[derive(Debug, Copy, Clone)]
-pub enum Operands {
-    None,
-    Unary(Operand),
-    Binary(Operand, Operand),
-}
 
-#[derive(Debug, Copy, Clone)]
-pub struct Opcode(pub [Option<u8>; 3]);
-impl Opcode {
-    pub fn from(s: &[u8]) -> Self {
-        let mut r: [Option<u8>; 3] = Default::default();
-        for (i, v) in s.iter().enumerate() {
-            r[i] = Some(*v)
-        }
+pub type OperandVec = ArrayVec<Operand, 4>;
 
-        Self(r)
-    }
-
-    pub fn serialize(&self) -> Vec<u8> {
-        let mut v: Vec<u8> = Vec::with_capacity(2);
-        for s in self.0.iter() {
-            if let Some(o) = s {
-                v.push(*o);
-            }
-        }
-        v
-    }
-    pub fn serialize_with(&self, lower: u8) -> Vec<u8> {
-        let mut v: Vec<u8> = Vec::with_capacity(2);
-        for (i, s) in self.0.iter().enumerate() {
-            if let Some(o) = s {
-                let addition = if self.0.get(i + 1).is_none() {
-                    lower
-                } else {
-                    0
-                };
-                v.push(*o | lower);
-            }
-        }
-        v
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct Instruction {
-    pub opcode: Opcode,
-    pub operands: Operands,
-    pub displacement: Option<Operand>,
-    pub immediate: Option<Operand>,
+    pub op: Op,
+    pub operands: OperandVec,
 }
+
+#[derive(Debug, Copy, Clone)]
+pub struct Rex(u8);
+impl From<Rex> for u8 {
+    fn from(v: Rex) -> Self {
+        v.0
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct ModRM(u8);
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum Width {
+    W64,
+    W32,
+}
+impl Width {
+    fn rex_bit(&self) -> u8 {
+        if *self == Width::W64 {
+            0b1000
+        } else {
+            0
+        }
+    }
+}
+
+pub type OpcodeVec = ArrayVec<u8, 3>;
 
 impl Instruction {
-    pub fn op_0(opcode: &[u8]) -> Self {
+    pub fn op(op: Op, operands: &[Operand]) -> Self {
         Self {
-            opcode: Opcode::from(opcode),
-            operands: Operands::None,
-            displacement: None,
-            immediate: None,
-        }
-    }
-    pub fn op_1(opcode: &[u8], operand: Operand) -> Self {
-        Self {
-            opcode: Opcode::from(opcode),
-            operands: Operands::Unary(operand),
-            displacement: None,
-            immediate: None,
+            op,
+            operands: operands.iter().map(|z| *z).collect(),
         }
     }
 
-    pub fn op_2(opcode: &[u8], operand1: Operand, operand2: Operand) -> Self {
-        Self {
-            opcode: Opcode::from(opcode),
-            operands: Operands::Binary(operand1, operand2),
-            displacement: None,
-            immediate: None,
+    // Fig 2-4, 2.2.1.1 of 325383-sdm-vol-2abcd-dec-24.pdf
+    fn addr_mem(r: Reg, b: Reg, width: Width) -> (Rex, ModRM) {
+        todo!()
+    }
+    // Fig 2-6, 2.2.1.1 of 325383-sdm-vol-2abcd-dec-24.pdf
+    fn addr_reg(r: Reg, opcode: &[u8], width: Width) -> Result<(Rex, OpcodeVec), CodegenError> {
+        let mut rex: u8 = 0b0100 << 4;
+        if r.index() > 0b1111 {
+            return Err(CodegenError::InvalidRegister { reg: r }.into());
         }
+        let top = (r.index() & 0b1111) >> 3;
+        let lower = r.index() & 0b111;
+        rex |= width.rex_bit();
+        let mut z: OpcodeVec = opcode.iter().copied().collect();
+        *z.last_mut().unwrap() |= lower;
+
+        Ok((Rex(rex), z))
     }
 
-    pub fn with_immediate(self, immediate: Operand) -> Self {
-        Self {
-            immediate: Some(immediate),
-            ..self
-        }
-    }
     // Seriously inefficient
     pub fn serialize(&self) -> Result<Vec<u8>, CodegenError> {
         /*
@@ -138,22 +138,45 @@ impl Instruction {
 
             should probably study p104 of 325383-sdm-vol-2abcd-dec-24
         */
-        let mut rex: u8 = 0b0100 << 4;
         let mut v = vec![];
-        let mut opcode_bytes = vec![];
+
+        // Validate operand count.
+        let expected = self.op.operand_range();
+        if !expected.contains(&self.operands.len()) {
+            return Err(CodegenError::InvalidOperandCount {
+                got: self.operands.len(),
+                expected,
+            }
+            .into());
+        }
+
+        match self.op {
+            Op::Mov => {
+                let dest = self.operands[0];
+                let src = self.operands[1];
+                match (dest, src) {
+                    (Operand::Reg(r), Operand::Reg(b)) => {}
+                    (Operand::Reg(r), Operand::Immediate(b)) => {
+                        // Use register is in opcode. 16: 'B8+ rw iw', 32: 'B8+ rd id', 64: 'REX.W + B8+ rd io'
+                        let (rex, opcode) = Self::addr_reg(r, &[0xb8], Width::W64)?;
+                        v.push(rex.into());
+                        v.extend(opcode.iter());
+                        v.extend(b.bits().to_le_bytes());
+                    }
+                    _ => todo!(),
+                }
+            }
+        }
+        /*
         match &self.operands {
             Operands::None => {
                 opcode_bytes = self.opcode.serialize();
-            }
+            },
             Operands::Unary(operand) => {
                 match operand {
                     Operand::Reg(r) => {
                         if r.0 > 0b1111 {
-                            return Err(CodegenError::InvalidOperand {
-                                reason: "register index too large".to_owned(),
-                                operand: *operand,
-                            }
-                            .into());
+                            return Err(CodegenError::InvalidOperand{reason: "register index too large".to_owned(), operand: *operand}.into())
                         }
                         let top = (r.0 & 0b1111) >> 3;
                         rex |= top;
@@ -162,13 +185,11 @@ impl Instruction {
                         // This goes into the opcode, somehow.
                         opcode_bytes = self.opcode.serialize_with(bottom);
                         v.push(rex);
-                    }
-                    Operand::Immediate(_v) => {}
+                    },
+                    Operand::Immediate(_v) => {},
                 }
             }
-            Operands::Binary(..) => {
-                todo!()
-            }
+            Operands::Binary(..) => {todo!()}
         }
         // let mut v = vec![rex];
         warn!("rex: {rex:x?}");
@@ -179,9 +200,10 @@ impl Instruction {
                     let vi64 = imm.bits();
                     v.extend(vi64.to_le_bytes());
                 }
-                _ => todo!(),
+                _ => todo!()
             }
         }
+        */
         Ok(v)
     }
 }
