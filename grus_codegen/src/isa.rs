@@ -1,6 +1,7 @@
 use cranelift_codegen::ir::{self, Function, InstructionData};
 use cranelift_codegen::CodegenResult;
 
+use anyhow::Context;
 use log::*;
 use target_lexicon::Triple;
 
@@ -89,12 +90,8 @@ impl X86Isa {
                 debug!("inst: {inst:?}");
                 let instdata = dfg.insts[inst];
                 debug!("  instruction_data: {instdata:?}");
-                debug!(
-                    "  typevar_operand: {:?}",
-                    instdata.typevar_operand(&dfg.value_lists)
-                );
-                debug!("  opcode: {:?}", instdata.opcode());
                 let arguments = instdata.arguments(&dfg.value_lists);
+                let type_of = |v: &ir::Value| dfg.value_type(*v);
                 let types_of =
                     |v: &[ir::Value]| v.iter().map(|z| dfg.value_type(*z)).collect::<Vec<_>>();
                 debug!("  args: {:?} types: {:?}", arguments, types_of(&arguments));
@@ -105,6 +102,13 @@ impl X86Isa {
                     dfg.inst_results(inst),
                     types_of(&dfg.inst_results(inst))
                 );
+                let typevar_operand = instdata.typevar_operand(&dfg.value_lists);
+                debug!(
+                    "  typevar_operand: {:?}, type: {:?}",
+                    typevar_operand,
+                    typevar_operand.as_ref().map(|z| type_of(z))
+                );
+                debug!("  opcode: {:?}", instdata.opcode());
 
                 // We also don't have the types here... do WE have to propagate those?
                 match instdata {
@@ -139,24 +143,26 @@ impl X86Isa {
                             func.name
                         ),
                     },
-                    InstructionData::Binary { opcode, args } => {
-                        match opcode {
-                            ir::Opcode::Iadd => {
-                                // let xinst = cg::Instruction::op_0(&[0xc3]);
-                                // buffer.append(&mut xinst.serialize()?);
-                                // let xinst = cg::Instruction::op_2(&[0b10111000], cg::Operand::Reg(cg::Reg(0))).with_immediate(cg::Operand::Immediate(imm));
-                                // let xinst = cg::Instruction::op(cg::Op::Add(cg::Width::W64), &[cg::Operand::Reg(cg::Reg::RAX), cg::Operand::Immediate(imm)]);
-                                // buffer.append(&mut xinst.serialize()?);
-                                todo!();
-                            }
-                            _ => todo!(
-                                "unimplemented opcode: {:?} in {:?}, of {:?}",
-                                opcode,
-                                b,
-                                func.name
-                            ),
+                    InstructionData::Binary { opcode, args } => match opcode {
+                        ir::Opcode::Iadd => {
+                            let width: Width = typevar_operand
+                                .as_ref()
+                                .map(|z| type_of(z))
+                                .with_context(|| format!("could not determine width"))?
+                                .into();
+                            let xinst = cg::Instruction::op(
+                                Op::Add(width),
+                                &[Operand::Reg(Reg::RAX), Operand::Reg(Reg::RCX)],
+                            );
+                            buffer.append(&mut xinst.serialize()?);
                         }
-                    }
+                        _ => todo!(
+                            "unimplemented opcode: {:?} in {:?}, of {:?}",
+                            opcode,
+                            b,
+                            func.name
+                        ),
+                    },
                     _ => todo!(
                         "unimplemented instructiondata: {:?} in {:?}, of {:?}",
                         instdata,

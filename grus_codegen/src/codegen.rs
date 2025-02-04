@@ -46,6 +46,7 @@ impl Op {
 pub struct Reg(u8);
 impl Reg {
     pub const RAX: Reg = Reg(0);
+    pub const RCX: Reg = Reg(1);
     pub fn index(&self) -> u8 {
         self.0
     }
@@ -83,10 +84,25 @@ pub struct ModRM(u8);
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Width {
+    W128,
     W64,
     W32,
     W16,
+    W8,
 }
+impl From<cranelift_codegen::ir::types::Type> for Width {
+    fn from(v: cranelift_codegen::ir::Type) -> Self {
+        match v.bytes() {
+            val if val == 128 / 8 => Width::W128,
+            val if val == 64 / 8 => Width::W64,
+            val if val == 32 / 8 => Width::W32,
+            val if val == 16 / 8 => Width::W16,
+            val if val == 8 / 8 => Width::W8,
+            _ => panic!("unhandled width: {}", v.bytes()),
+        }
+    }
+}
+
 impl Width {
     fn rex_bit(&self) -> u8 {
         if *self == Width::W64 {
@@ -107,17 +123,31 @@ impl Instruction {
         }
     }
 
-    // Fig 2-4, 2.2.1.1 of 325383-sdm-vol-2abcd-dec-24.pdf
-    fn addr_mem(r: Reg, b: Reg, width: Width) -> (Rex, ModRM) {
-        todo!()
+    // Fig 2-5, 2.2.1.1 of 325383-sdm-vol-2abcd-dec-24.pdf
+    fn addr_regs(r: Reg, b: Reg, width: Width) -> Result<(Rex, ModRM), CodegenError> {
+        let mut rex: u8 = 0b0100 << 4;
+        let rtop = (r.index() & 0b1111) >> 3;
+        let rlower = r.index() & 0b111;
+        let btop = (b.index() & 0b1111) >> 3;
+        let blower = r.index() & 0b111;
+        rex |= btop;
+        rex |= rtop << 2;
+        rex |= width.rex_bit();
+        let mut modrm: u8 = 0;
+        modrm |= blower;
+        modrm |= rlower << 3;
+        modrm |= 0b11 << 6;
+        // what goes into the left bits??
+        Ok((Rex(rex), ModRM(modrm)))
     }
-    // Fig 2-6, 2.2.1.1 of 325383-sdm-vol-2abcd-dec-24.pdf
+    // Fig 2-7, 2.2.1.1 of 325383-sdm-vol-2abcd-dec-24.pdf
     fn addr_reg(r: Reg, opcode: &[u8], width: Width) -> Result<(Rex, OpcodeVec), CodegenError> {
         let mut rex: u8 = 0b0100 << 4;
         if r.index() > 0b1111 {
             return Err(CodegenError::InvalidRegister { reg: r }.into());
         }
         let top = (r.index() & 0b1111) >> 3;
+        rex |= top;
         let lower = r.index() & 0b111;
         rex |= width.rex_bit();
         let mut z: OpcodeVec = opcode.iter().copied().collect();
@@ -160,10 +190,12 @@ impl Instruction {
                 let dest = self.operands[0];
                 let src = self.operands[1];
                 match (dest, src) {
-                    (Operand::Reg(r), Operand::Reg(b)) => {}
+                    (Operand::Reg(r), Operand::Reg(b)) => {
+                        todo!()
+                    }
                     (Operand::Reg(r), Operand::Immediate(b)) => {
-                        // Use register is in opcode. 16: 'B8+ rw iw', 32: 'B8+ rd id', 64: 'REX.W + B8+ rd io'
-                        let (rex, opcode) = Self::addr_reg(r, &[0xb8], width)?;
+                        // Use register is in opcode. MOV 16: 'B8+ rw iw', 32: 'B8+ rd id', 64: 'REX.W + B8+ rd io'
+                        let (rex, opcode) = Self::addr_reg(r, &[0xB8], width)?;
                         v.push(rex.into());
                         v.extend(opcode.iter());
                         v.extend(b.bits().to_le_bytes());
@@ -175,13 +207,14 @@ impl Instruction {
                 let dest = self.operands[0];
                 let src = self.operands[1];
                 match (dest, src) {
-                    (Operand::Reg(r), Operand::Reg(b)) => {}
-                    (Operand::Reg(r), Operand::Immediate(b)) => {
-                        // Use register is in opcode. 16: 'B8+ rw iw', 32: 'B8+ rd id', 64: 'REX.W + B8+ rd io'
-                        let (rex, opcode) = Self::addr_reg(r, &[0xb8], Width::W64)?;
+                    (Operand::Reg(r), Operand::Reg(b)) => {
+                        // // /r, ADD, 16: '01 /r', 32: '01 /r', 64: 'REX.W + 01 /r'
+                        let (rex, modrm) = Self::addr_regs(r, b, width)?;
                         v.push(rex.into());
-                        v.extend(opcode.iter());
-                        v.extend(b.bits().to_le_bytes());
+                        v.push(0x01);
+                    }
+                    (Operand::Reg(r), Operand::Immediate(b)) => {
+                        todo!()
                     }
                     _ => todo!(),
                 }
