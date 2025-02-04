@@ -27,13 +27,17 @@ pub enum CodegenError {
 
 #[derive(Debug, Copy, Clone)]
 pub enum Op {
-    Mov,
+    Mov(Width),
+    Add(Width),
+    Return,
 }
 
 impl Op {
     pub fn operand_range(&self) -> OperandRange {
         match self {
-            Op::Mov => 2..=2,
+            Op::Mov(_) => 2..=2,
+            Op::Add(_) => 2..=2,
+            _ => 0..=0,
         }
     }
 }
@@ -81,6 +85,7 @@ pub struct ModRM(u8);
 pub enum Width {
     W64,
     W32,
+    W16,
 }
 impl Width {
     fn rex_bit(&self) -> u8 {
@@ -151,7 +156,22 @@ impl Instruction {
         }
 
         match self.op {
-            Op::Mov => {
+            Op::Mov(width) => {
+                let dest = self.operands[0];
+                let src = self.operands[1];
+                match (dest, src) {
+                    (Operand::Reg(r), Operand::Reg(b)) => {}
+                    (Operand::Reg(r), Operand::Immediate(b)) => {
+                        // Use register is in opcode. 16: 'B8+ rw iw', 32: 'B8+ rd id', 64: 'REX.W + B8+ rd io'
+                        let (rex, opcode) = Self::addr_reg(r, &[0xb8], width)?;
+                        v.push(rex.into());
+                        v.extend(opcode.iter());
+                        v.extend(b.bits().to_le_bytes());
+                    }
+                    _ => todo!(),
+                }
+            }
+            Op::Add(width) => {
                 let dest = self.operands[0];
                 let src = self.operands[1];
                 match (dest, src) {
@@ -166,44 +186,11 @@ impl Instruction {
                     _ => todo!(),
                 }
             }
-        }
-        /*
-        match &self.operands {
-            Operands::None => {
-                opcode_bytes = self.opcode.serialize();
-            },
-            Operands::Unary(operand) => {
-                match operand {
-                    Operand::Reg(r) => {
-                        if r.0 > 0b1111 {
-                            return Err(CodegenError::InvalidOperand{reason: "register index too large".to_owned(), operand: *operand}.into())
-                        }
-                        let top = (r.0 & 0b1111) >> 3;
-                        rex |= top;
-                        rex |= 0b1000;
-                        let bottom = r.0 & 0b111;
-                        // This goes into the opcode, somehow.
-                        opcode_bytes = self.opcode.serialize_with(bottom);
-                        v.push(rex);
-                    },
-                    Operand::Immediate(_v) => {},
-                }
-            }
-            Operands::Binary(..) => {todo!()}
-        }
-        // let mut v = vec![rex];
-        warn!("rex: {rex:x?}");
-        v.append(&mut opcode_bytes);
-        if let Some(immediate) = self.immediate {
-            match immediate {
-                Operand::Immediate(imm) => {
-                    let vi64 = imm.bits();
-                    v.extend(vi64.to_le_bytes());
-                }
-                _ => todo!()
+            Op::Return => {
+                const RETN: u8 = 0xc3;
+                v.push(RETN);
             }
         }
-        */
         Ok(v)
     }
 }

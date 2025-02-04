@@ -5,6 +5,7 @@ use log::*;
 use target_lexicon::Triple;
 
 use crate::codegen as cg;
+use cg::{Op, Operand, Reg, Width};
 
 #[derive(Debug)]
 pub struct X86Isa {
@@ -113,10 +114,9 @@ impl X86Isa {
                         // Immediate to register, p2487
                         match opcode {
                             ir::Opcode::Iconst => {
-                                // 0b1011W000  W is 64??
                                 let xinst = cg::Instruction::op(
-                                    cg::Op::Mov,
-                                    &[cg::Operand::Reg(cg::Reg::RAX), cg::Operand::Immediate(imm)],
+                                    Op::Mov(Width::W64),
+                                    &[Operand::Reg(Reg::RAX), Operand::Immediate(imm)],
                                 );
                                 buffer.append(&mut xinst.serialize()?);
                             }
@@ -128,28 +128,25 @@ impl X86Isa {
                             ),
                         }
                     }
-                    InstructionData::MultiAry { opcode, args } => {
-                        match opcode {
-                            ir::Opcode::Return => {
-                                // let xinst = cg::Instruction::op_0(&[0xc3]);
-                                // buffer.append(&mut xinst.serialize()?);
-                                const RETN: u8 = 0xc3;
-                                buffer.push(RETN);
-                            }
-                            _ => todo!(
-                                "unimplemented opcode: {:?} in {:?}, of {:?}",
-                                opcode,
-                                b,
-                                func.name
-                            ),
+                    InstructionData::MultiAry { opcode, args } => match opcode {
+                        ir::Opcode::Return => {
+                            buffer.append(&mut cg::Instruction::op(Op::Return, &[]).serialize()?);
                         }
-                    }
+                        _ => todo!(
+                            "unimplemented opcode: {:?} in {:?}, of {:?}",
+                            opcode,
+                            b,
+                            func.name
+                        ),
+                    },
                     InstructionData::Binary { opcode, args } => {
                         match opcode {
                             ir::Opcode::Iadd => {
                                 // let xinst = cg::Instruction::op_0(&[0xc3]);
                                 // buffer.append(&mut xinst.serialize()?);
                                 // let xinst = cg::Instruction::op_2(&[0b10111000], cg::Operand::Reg(cg::Reg(0))).with_immediate(cg::Operand::Immediate(imm));
+                                // let xinst = cg::Instruction::op(cg::Op::Add(cg::Width::W64), &[cg::Operand::Reg(cg::Reg::RAX), cg::Operand::Immediate(imm)]);
+                                // buffer.append(&mut xinst.serialize()?);
                                 todo!();
                             }
                             _ => todo!(
