@@ -1,13 +1,5 @@
 use cranelift::prelude::Imm64;
-
 use log::warn;
-
-use thiserror::Error;
-#[derive(Error, Debug)]
-pub enum CodegenError {
-    #[error("Register invalid: {reason} in {operand:?}")]
-    InvalidOperand { reason: String, operand: Operand },
-}
 
 /*
 echo "0x0f 0x28 0x44 0xd8 0x10" | llvm-mc-13  -disassemble -triple=x86_64 -output-asm-variant=1
@@ -18,6 +10,19 @@ echo "0x48 0xb8 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11" | llvm-mc-13  -disassem
 
     p35 DI & SI appears to be special in 16 bit... lets just ignore that?
 */
+
+#[derive(Debug, Copy, Clone)]
+pub enum Op {
+    Mov,
+}
+
+use thiserror::Error;
+#[derive(Error, Debug)]
+pub enum CodegenError {
+    #[error("Register invalid: {reason} in {operand:?}")]
+    InvalidOperand { reason: String, operand: Operand },
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct Reg(pub u8);
 
@@ -25,8 +30,11 @@ pub struct Reg(pub u8);
 pub enum Operand {
     /// A direct register.
     Reg(Reg),
+    /// An immediate value.
     Immediate(Imm64),
     // TODO: Magic stuff [EAX] and [--][--], page 36.
+    // Memory(Reg)?
+    // MemoryOffset(RegBase, RegOffset)?
 }
 #[derive(Debug, Copy, Clone)]
 pub enum Operands {
@@ -79,6 +87,7 @@ pub struct Instruction {
     pub displacement: Option<Operand>,
     pub immediate: Option<Operand>,
 }
+
 impl Instruction {
     pub fn op_0(opcode: &[u8]) -> Self {
         Self {
