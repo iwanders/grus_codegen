@@ -119,7 +119,7 @@ impl X86Isa {
                             ir::Opcode::Iconst => {
                                 let xinst = cg::Instruction::op(
                                     Op::Mov(Width::W64),
-                                    &[Operand::Reg(Reg::RAX), Operand::Immediate(imm)],
+                                    &[Operand::Reg(Reg::EAX), Operand::Immediate(imm)],
                                 );
                                 buffer.append(&mut xinst.serialize()?);
                             }
@@ -131,8 +131,9 @@ impl X86Isa {
                             ),
                         }
                     }
-                    InstructionData::MultiAry { opcode, args: _ } => match opcode {
+                    InstructionData::MultiAry { opcode, args } => match opcode {
                         ir::Opcode::Return => {
+                            println!("  Return  args: {args:?}");
                             buffer.append(&mut cg::Instruction::op(Op::Return, &[]).serialize()?);
                         }
                         _ => todo!(
@@ -151,7 +152,14 @@ impl X86Isa {
                                 .into();
                             let xinst = cg::Instruction::op(
                                 Op::Add(width),
-                                &[Operand::Reg(Reg::RAX), Operand::Reg(Reg::RCX)],
+                                &[Operand::Reg(Reg::EDI), Operand::Reg(Reg::ESI)],
+                            );
+
+                            // That leaves the result in ESI, so move it to EAX to be ready for the return.
+                            buffer.append(&mut xinst.serialize()?);
+                            let xinst = cg::Instruction::op(
+                                Op::Mov(Width::W64),
+                                &[Operand::Reg(Reg::EAX), Operand::Reg(Reg::ESI)],
                             );
                             buffer.append(&mut xinst.serialize()?);
                         }
@@ -171,7 +179,11 @@ impl X86Isa {
                 }
             }
         }
-        warn!("buffer: {buffer:x?}");
+        let mut s = String::new();
+        for b in buffer.iter() {
+            s += &format!(" 0x{b:0>2x}");
+        }
+        warn!("buffer: echo {s}");
 
         // const NOP: u8 = 0x90;
         // const RETN: u8 = 0xc3;

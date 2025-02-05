@@ -1,7 +1,6 @@
-use cranelift::prelude::Imm64;
-use log::warn;
-// use smallvec::{SmallVec, ToSmallVec};
 use arrayvec::ArrayVec;
+use cranelift::prelude::Imm64;
+use log::*;
 
 use thiserror::Error;
 
@@ -45,8 +44,14 @@ impl Op {
 #[derive(Debug, Copy, Clone)]
 pub struct Reg(u8);
 impl Reg {
-    pub const RAX: Reg = Reg(0);
-    pub const RCX: Reg = Reg(1);
+    pub const EAX: Reg = Reg(0b000);
+    pub const ECX: Reg = Reg(0b001);
+    pub const EDX: Reg = Reg(0b010);
+    pub const EBX: Reg = Reg(0b011);
+    pub const EBP: Reg = Reg(0b101);
+    pub const ESP: Reg = Reg(0b100);
+    pub const ESI: Reg = Reg(0b110);
+    pub const EDI: Reg = Reg(0b111);
     pub fn index(&self) -> u8 {
         self.0
     }
@@ -81,6 +86,11 @@ impl From<Rex> for u8 {
 
 #[derive(Debug, Copy, Clone)]
 pub struct ModRM(u8);
+impl From<ModRM> for u8 {
+    fn from(v: ModRM) -> Self {
+        v.0
+    }
+}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Width {
@@ -129,7 +139,7 @@ impl Instruction {
         let rtop = (r.index() & 0b1111) >> 3;
         let rlower = r.index() & 0b111;
         let btop = (b.index() & 0b1111) >> 3;
-        let blower = r.index() & 0b111;
+        let blower = b.index() & 0b111;
         rex |= btop;
         rex |= rtop << 2;
         rex |= width.rex_bit();
@@ -191,7 +201,10 @@ impl Instruction {
                 let src = self.operands[1];
                 match (dest, src) {
                     (Operand::Reg(r), Operand::Reg(b)) => {
-                        todo!()
+                        let (rex, modrm) = Self::addr_regs(r, b, width)?;
+                        v.push(rex.into());
+                        v.push(0x8B);
+                        v.push(modrm.into());
                     }
                     (Operand::Reg(r), Operand::Immediate(b)) => {
                         // Use register is in opcode. MOV 16: 'B8+ rw iw', 32: 'B8+ rd id', 64: 'REX.W + B8+ rd io'
@@ -212,8 +225,9 @@ impl Instruction {
                         let (rex, modrm) = Self::addr_regs(r, b, width)?;
                         v.push(rex.into());
                         v.push(0x01);
+                        v.push(modrm.into());
                     }
-                    (Operand::Reg(r), Operand::Immediate(b)) => {
+                    (Operand::Reg(_r), Operand::Immediate(_b)) => {
                         todo!()
                     }
                     _ => todo!(),

@@ -32,7 +32,7 @@ pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
     jit_module.write("/tmp/foo.o")?;
 
     let mut fun_trampolines: Vec<Box<dyn Fn(&Vec<DataValue>) -> u64>> = vec![];
-    for (i, (fun, _detail)) in test_file.functions.iter().enumerate() {
+    for (i, (_fun, _detail)) in test_file.functions.iter().enumerate() {
         let p = jit_module
             .get_fun(&funids[i])
             .context(format!("could not find function"))?;
@@ -84,7 +84,7 @@ pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
                     in("rcx") regs[3],
                     in("r8") regs[4],
                     in("r9") regs[5],
-                    lateout("eax") x,
+                    lateout("rax") x,
                 );
             }
             x
