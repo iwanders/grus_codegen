@@ -136,6 +136,7 @@ impl Instruction {
     }
 
     // Fig 2-5, 2.2.1.1 of 325383-sdm-vol-2abcd-dec-24.pdf
+    /// Format register r (R) as first argument, b as second argument (depicted M) in intel manual.
     fn addr_regs(r: Reg, b: Reg, width: Width) -> Result<(Rex, ModRM), CodegenError> {
         let mut rex: u8 = 0b0100 << 4;
         let rtop = (r.index() & 0b1111) >> 3;
@@ -152,6 +153,7 @@ impl Instruction {
         // what goes into the left bits??
         Ok((Rex(rex), ModRM(modrm)))
     }
+
     // Fig 2-7, 2.2.1.1 of 325383-sdm-vol-2abcd-dec-24.pdf
     fn addr_reg(r: Reg, opcode: &[u8], width: Width) -> Result<(Rex, OpcodeVec), CodegenError> {
         let mut rex: u8 = 0b0100 << 4;

@@ -42,3 +42,34 @@ block0(v0: i32,v1: i32):
 ; run: %add_i32(0x01234567, 0xFEDCBA98) == -1
 ; run: %add_i32(0xA00A00A0, 0x0BB0BB0B) == 0xABBABBAB
 ; run: %add_i32(0xC0FFEEEE, 0x1DCB1111) == 0xDECAFFFF
+
+
+function %add_i16(i16, i16) -> i16 {
+block0(v0: i16,v1: i16):
+    v2 = iadd v0, v1
+    return v2
+}
+; run: %add_i16(0, 0) == 0
+; run: %add_i16(0, 1) == 1
+; run: %add_i16(-1, 0) == -1
+; run: %add_i16(-1, 1) == 0
+; run: %add_i16(0x7FFF, 0x7FFF) == -2
+; run: %add_i16(0x7FFF, 0x8000) == -1
+; run: %add_i16(0x0123, 0xFEDC) == -1
+; run: %add_i16(0xA00A, 0x0BB0) == 0xABBA
+; run: %add_i16(0xC0FF, 0x1DCB) == 0xDECA
+
+function %add_i8(i8, i8) -> i8 {
+block0(v0: i8,v1: i8):
+    v2 = iadd v0, v1
+    return v2
+}
+; run: %add_i8(0, 0) == 0
+; run: %add_i8(0, 1) == 1
+; run: %add_i8(-1, 0) == -1
+; run: %add_i8(-1, 1) == 0
+; run: %add_i8(0x7F, 0x7F) == -2
+; run: %add_i8(0x7F, 0x80) == -1
+; run: %add_i8(0x01, 0xFE) == -1
+; run: %add_i8(0xA0, 0x0B) == 0xAB
+; run: %add_i8(0xC0, 0x1D) == 0xDD
