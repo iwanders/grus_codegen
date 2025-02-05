@@ -113,13 +113,12 @@ impl X86Isa {
                 match instdata {
                     InstructionData::UnaryImm { opcode, imm } => {
                         // How do we know where this goes..
-                        // Line is `v1 = iconst.i8 0` in the clif... how do we get the Value of v1?
                         // Immediate to register, p2487
                         match opcode {
                             ir::Opcode::Iconst => {
                                 let xinst = cg::Instruction::op(
                                     Op::Mov(Width::W64),
-                                    &[Operand::Reg(Reg::EAX), Operand::Immediate(imm)],
+                                    &[Operand::Reg(Reg::EAX), Operand::Immediate(imm.bits())],
                                 );
                                 buffer.append(&mut xinst.serialize()?);
                             }
@@ -155,7 +154,7 @@ impl X86Isa {
                                 &[Operand::Reg(Reg::EDI), Operand::Reg(Reg::ESI)],
                             );
 
-                            // That leaves the result in ESI, so move it to EAX to be ready for the return.
+                            // That leaves the result in EDI, so move it to EAX to be ready for the return.
                             buffer.append(&mut xinst.serialize()?);
                             let xinst = cg::Instruction::op(
                                 Op::Mov(Width::W64),

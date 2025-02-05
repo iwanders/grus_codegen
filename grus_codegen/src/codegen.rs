@@ -1,7 +1,5 @@
 use arrayvec::ArrayVec;
-use cranelift::prelude::Imm64;
 use log::*;
-
 use thiserror::Error;
 
 /*
@@ -64,7 +62,7 @@ pub enum Operand {
     /// A direct register.
     Reg(Reg),
     /// An immediate value.
-    Immediate(Imm64),
+    Immediate(i64),
     // TODO: Magic stuff [EAX] and [--][--], page 36.
     // Memory(Reg)?
     // MemoryOffset(RegBase, RegOffset)?
@@ -216,7 +214,7 @@ impl Instruction {
                         let (rex, opcode) = Self::addr_reg(r, &[0xB8], width)?;
                         v.push(rex.into());
                         v.extend(opcode.iter());
-                        v.extend(b.bits().to_le_bytes());
+                        v.extend(b.to_le_bytes());
                     }
                     _ => todo!(),
                 }
