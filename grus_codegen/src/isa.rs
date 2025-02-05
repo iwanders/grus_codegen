@@ -159,7 +159,7 @@ impl X86Isa {
                             buffer.append(&mut xinst.serialize()?);
                             let xinst = cg::Instruction::op(
                                 Op::Mov(Width::W64),
-                                &[Operand::Reg(Reg::EAX), Operand::Reg(Reg::ESI)],
+                                &[Operand::Reg(Reg::EAX), Operand::Reg(Reg::EDI)],
                             );
                             buffer.append(&mut xinst.serialize()?);
                         }

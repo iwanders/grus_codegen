@@ -5,6 +5,8 @@ use log::*;
 use thiserror::Error;
 
 /*
+-output-asm-variant=1 switches to Intel syntax; destination before source.
+
 echo "0x0f 0x28 0x44 0xd8 0x10" | llvm-mc-13  -disassemble -triple=x86_64 -output-asm-variant=1
 echo "0x48 0xb8 0x88 0x77 0x66 0x55 0x44 0x33 0x22 0x11" | llvm-mc-13  -disassemble -triple=x86_64 -output-asm-variant=1
 
@@ -202,6 +204,7 @@ impl Instruction {
                 match (dest, src) {
                     (Operand::Reg(r), Operand::Reg(b)) => {
                         let (rex, modrm) = Self::addr_regs(r, b, width)?;
+                        // Copies second into first.
                         v.push(rex.into());
                         v.push(0x8B);
                         v.push(modrm.into());
@@ -222,9 +225,10 @@ impl Instruction {
                 match (dest, src) {
                     (Operand::Reg(r), Operand::Reg(b)) => {
                         // // /r, ADD, 16: '01 /r', 32: '01 /r', 64: 'REX.W + 01 /r'
+                        // Add destination (first) to second, then stores result in destination.
                         let (rex, modrm) = Self::addr_regs(r, b, width)?;
                         v.push(rex.into());
-                        v.push(0x01);
+                        v.push(0x03);
                         v.push(modrm.into());
                     }
                     (Operand::Reg(_r), Operand::Immediate(_b)) => {

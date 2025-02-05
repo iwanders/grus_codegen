@@ -72,6 +72,7 @@ pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
             use std::arch::asm;
             let mut x: u64;
             unsafe {
+                // This is AT&T syntax, source before destination.
                 asm!(
                     // "nop",
                     "call {p};",
