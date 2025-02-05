@@ -3,7 +3,7 @@ use object::{SymbolFlags, SymbolKind, SymbolScope};
 // Relocation, SectionId,
 use cranelift_codegen::ir;
 use cranelift_module::{FuncId, ModuleDeclarations, ModuleError, ModuleResult};
-use log::{trace, warn};
+use log::*;
 
 pub use cranelift_module::Linkage;
 
@@ -19,7 +19,6 @@ fn translate_linkage(linkage: Linkage) -> (SymbolScope, bool) {
     (scope, weak)
 }
 
-use std::pin::Pin;
 use std::sync::Arc;
 pub struct JitModule {
     module: ObjectModule,

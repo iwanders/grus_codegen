@@ -1,5 +1,4 @@
 use cranelift_codegen::ir::{self, Function, InstructionData};
-use cranelift_codegen::CodegenResult;
 
 use anyhow::Context;
 use log::*;
@@ -132,7 +131,7 @@ impl X86Isa {
                             ),
                         }
                     }
-                    InstructionData::MultiAry { opcode, args } => match opcode {
+                    InstructionData::MultiAry { opcode, args: _ } => match opcode {
                         ir::Opcode::Return => {
                             buffer.append(&mut cg::Instruction::op(Op::Return, &[]).serialize()?);
                         }
@@ -143,7 +142,7 @@ impl X86Isa {
                             func.name
                         ),
                     },
-                    InstructionData::Binary { opcode, args } => match opcode {
+                    InstructionData::Binary { opcode, args: _ } => match opcode {
                         ir::Opcode::Iadd => {
                             let width: Width = typevar_operand
                                 .as_ref()
