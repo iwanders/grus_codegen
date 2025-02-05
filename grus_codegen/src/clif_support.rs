@@ -31,7 +31,7 @@ pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
     let jit_module = module.jit()?;
     jit_module.write("/tmp/foo.o")?;
 
-    let mut fun_trampolines: Vec<Box<dyn Fn() -> u64>> = vec![];
+    let mut fun_trampolines: Vec<Box<dyn Fn(&Vec<DataValue>) -> u64>> = vec![];
     for (i, (fun, _detail)) in test_file.functions.iter().enumerate() {
         let p = jit_module
             .get_fun(&funids[i])
@@ -50,15 +50,40 @@ pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
 
         // For now, we can make this a bit simpler, since we don't take any arguments so far...
         // Probably this works?
-        fun_trampolines.push(Box::new(move || {
+        fun_trampolines.push(Box::new(move |args: &Vec<DataValue>| {
+            // RDI, RSI, RDX, RCX, R8, R9
+            if args.len() > 6 {
+                todo!("handle functions with more than 6 arguments");
+            }
+
+            let mut regs = [0u64; 6];
+            for i in 0..5 {
+                regs[i] = args
+                    .get(i)
+                    .map(|v| {
+                        let mut b = [0u8; 8];
+                        v.write_to_slice_le(&mut b);
+                        u64::from_le_bytes(b)
+                    })
+                    .unwrap_or(0);
+            }
+            warn!("setting up regs: {regs:?}");
+
             use std::arch::asm;
             let mut x: u64;
             unsafe {
                 asm!(
+                    // "nop",
                     "call {p};",
                     // "mov {x}, %eax;",
                     // x = inout(reg) x,
                     p = in(reg) p,
+                    in("rdi") regs[0],
+                    in("rsi") regs[1],
+                    in("rdx") regs[2],
+                    in("rcx") regs[3],
+                    in("r8") regs[4],
+                    in("r9") regs[5],
                     lateout("eax") x,
                 );
             }
@@ -76,15 +101,15 @@ pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
                 trace!(" sign: {:?}", f.signature);
                 if let cranelift_reader::RunCommand::Run(invocation, comparison, args) = cmd {
                     trace!("invocation: {:?}, {:?}", invocation.func, invocation.args);
-                    if !invocation.args.is_empty() {
-                        todo!("Handle arguments in trampoline");
-                    }
+                    // if !invocation.args.is_empty() {
+                    // todo!("Handle arguments in trampoline");
+                    // }
                     trace!("comparison: {comparison:?}");
                     trace!("args: {args:?}");
                     // lets goooo!
                     let trampo = &fun_trampolines[i];
                     trace!("Invoking the trampoline... 🤞");
-                    let res = (*trampo)();
+                    let res = (*trampo)(&invocation.args);
                     trace!("result: {res:?}");
 
                     match comparison {
