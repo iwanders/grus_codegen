@@ -1,0 +1,12 @@
+[package]
+name = "grus_regalloc"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0 WITH LLVM-exception"
+
+[dependencies]
+
+
+anyhow = { workspace = true }
+regalloc2 = { workspace = true }
+cranelift-codegen = { workspace = true }
