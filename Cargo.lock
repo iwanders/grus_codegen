@@ -416,6 +416,7 @@ dependencies = [
  "env_logger",
  "grus_module",
  "log",
+ "regalloc2",
  "target-lexicon",
  "thiserror",
  "walkdir",
