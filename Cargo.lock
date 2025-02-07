@@ -415,6 +415,7 @@ dependencies = [
  "cranelift-reader",
  "env_logger",
  "grus_module",
+ "grus_regalloc",
  "log",
  "regalloc2",
  "target-lexicon",

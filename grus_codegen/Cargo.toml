@@ -16,6 +16,7 @@ cranelift = {workspace = true}
 
 anyhow = {workspace=true}
 grus_module = {workspace=true}
+grus_regalloc = {workspace=true}
 
 log = { workspace = true }
 thiserror = { workspace = true }

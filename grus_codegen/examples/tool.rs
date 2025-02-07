@@ -15,6 +15,15 @@ enum Commands {
         /// Files to run.
         files: Vec<std::path::PathBuf>,
     },
+    /// Run a clif file through the register allocation.
+    RegAlloc {
+        /// File to run register allocation on.
+        file: std::path::PathBuf,
+
+        /// The function index to use in this file.
+        #[clap(long, short, default_value = "0")]
+        index: usize,
+    },
 }
 
 use anyhow::Result;
@@ -28,6 +37,9 @@ fn main() -> Result<()> {
     match &cli.command {
         Commands::Test { files } => {
             grus_codegen::clif_support::test_files(&files)?;
+        }
+        Commands::RegAlloc { file, index } => {
+            grus_codegen::clif_support::reg_alloc(&file, *index)?;
         }
     }
     Ok(())

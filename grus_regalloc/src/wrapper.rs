@@ -1,6 +1,5 @@
 use cranelift_codegen::ir::Function as CraneliftIrFunction;
 // use cranelift_codegen::ir::Block as IrBlock;
-use cranelift_codegen::ir;
 use cranelift_codegen::ir::Inst as IrInst;
 use regalloc2::Block as RegBlock;
 use regalloc2::Function as RegFunction;
@@ -10,11 +9,14 @@ use regalloc2::{InstRange, PRegSet, RegClass, VReg};
 
 use std::collections::HashMap;
 
+#[derive(Debug)]
 struct InstInfo {
     is_ret: bool,
+    is_branch: bool,
     operands: Vec<RegOperand>,
 }
 
+#[derive(Debug)]
 pub struct IrFunction {
     num_insts: usize,
     num_blocks: usize,
@@ -70,7 +72,12 @@ impl IrFunction {
                 // Input arguments to instruction.
                 let arguments = instdata.arguments(&fun.dfg.value_lists);
                 for v in arguments {
-                    let regtype = RegClass::Int;
+                    let valuetype = fun.dfg.value_type(*v);
+                    let regtype = if valuetype.is_int() {
+                        RegClass::Int
+                    } else {
+                        RegClass::Float
+                    };
                     let operand = RegOperand::new(
                         VReg::new(v.as_u32() as usize, regtype),
                         regalloc2::OperandConstraint::Any,
@@ -82,7 +89,12 @@ impl IrFunction {
 
                 // Results of instruction.
                 for r in fun.dfg.inst_results(irinst) {
-                    let regtype = RegClass::Int;
+                    let valuetype = fun.dfg.value_type(*r);
+                    let regtype = if valuetype.is_int() {
+                        RegClass::Int
+                    } else {
+                        RegClass::Float
+                    };
                     let operand = RegOperand::new(
                         VReg::new(r.as_u32() as usize, regtype),
                         regalloc2::OperandConstraint::Any,
@@ -92,8 +104,13 @@ impl IrFunction {
                     operands.push(operand);
                 }
 
-                let is_ret = instdata.opcode() == ir::Opcode::Return;
-                let info = InstInfo { is_ret, operands };
+                let is_ret = instdata.opcode().is_return();
+                let is_branch = instdata.opcode().is_branch();
+                let info = InstInfo {
+                    is_ret,
+                    is_branch,
+                    operands,
+                };
                 let reg_inst = RegInst::new(irinst.as_u32() as usize);
                 inst_info.insert(reg_inst, info);
             }
@@ -135,8 +152,8 @@ impl RegFunction for IrFunction {
     fn is_ret(&self, reginst: regalloc2::Inst) -> bool {
         self.inst_info[&reginst].is_ret
     }
-    fn is_branch(&self, _: regalloc2::Inst) -> bool {
-        todo!()
+    fn is_branch(&self, reginst: regalloc2::Inst) -> bool {
+        self.inst_info[&reginst].is_branch
     }
     fn branch_blockparams(&self, _: regalloc2::Block, _: regalloc2::Inst, _: usize) -> &[VReg] {
         todo!()

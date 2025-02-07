@@ -159,3 +159,22 @@ pub fn test_files<P: AsRef<std::path::Path> + std::fmt::Debug>(files: &[P]) -> R
     }
     Ok(all_passed)
 }
+
+pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
+    file: &P,
+    fun_index: usize,
+) -> Result<()> {
+    let f = std::fs::read_to_string(&file).context(format!("failed to open {file:?}"))?;
+    let test_file = cranelift_reader::parse_test(&f, Default::default())?;
+    // all_passed &= process_test_file(&test_file)?;
+
+    let function = test_file
+        .functions
+        .get(fun_index)
+        .context(format!("fun index {fun_index} out of bounds"))?;
+    let function = &function.0;
+
+    grus_regalloc::run_ir(&function, &grus_regalloc::default_env())?;
+
+    Ok(())
+}

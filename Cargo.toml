@@ -11,6 +11,7 @@ members = [
 grus_codegen = { path = "grus_codegen", default-features = false }
 grus_module = { path = "grus_module", default-features = false }
 grus_testing = { path = "grus_testing", default-features = false }
+grus_regalloc = { path = "grus_regalloc", default-features = false }
 
 
 
