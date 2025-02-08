@@ -1,9 +1,16 @@
 use cranelift_codegen::ir;
 use regalloc2::Function as RegFunction;
 use regalloc2::Output as RegOutput;
-use regalloc2::{MachineEnv, PReg, RegAllocError, VReg};
+use regalloc2::{
+    Allocation, Inst, MachineEnv, Operand, OperandConstraint, PReg, RegAllocError, VReg,
+};
 
 pub mod wrapper;
+
+/*
+Todo: How do we specify that arguments exist in the machine at the start of the function?
+    -> Probably... create an instruction that does a Def on regalloc2::OperandConstraint::FixedReg?
+*/
 
 /*
 Okay... so register allocation. 😰
@@ -13,27 +20,89 @@ And lets start with local (in-block) allocation only.
 
 use std::collections::HashMap;
 
+#[derive(Default)]
+struct AllocationTracker {
+    allocs: Vec<Allocation>,
+    /// Allocations used for one definition is allocs[inst_alloc_offsets[inst.index()]..inst_alloc_offsets[(inset.index()+1)]]
+    inst_alloc_offsets: Vec<u32>,
+
+    previous_inst: Option<Inst>,
+}
+
+impl AllocationTracker {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn add_allocation(&mut self, inst: Inst, alloc: Allocation) {
+        if let Some(v) = self.previous_inst.as_mut() {
+            if *v != inst {
+                self.inst_alloc_offsets.push(self.allocs.len() as u32);
+            }
+        } else {
+            self.allocs.push(alloc);
+        }
+
+        self.previous_inst = Some(inst);
+    }
+
+    pub fn inst_alloc_offsets(&self) -> Vec<u32> {
+        self.inst_alloc_offsets.clone()
+    }
+    pub fn allocs(&self) -> Vec<Allocation> {
+        self.allocs.clone()
+    }
+}
+
 pub struct Machine {
+    pub preferred_reg_orders: [Vec<PReg>; 3],
     pub preferred_regs_by_class: [HashMap<PReg, Option<VReg>>; 3],
     pub non_preferred_regs_by_class: [HashMap<PReg, Option<VReg>>; 3],
+    pub non_preferred_reg_orders: [Vec<PReg>; 3],
 }
 
 impl Machine {
     pub fn new(env: &regalloc2::MachineEnv) -> Self {
         let mut preferred_regs_by_class: [HashMap<PReg, Option<VReg>>; 3] = Default::default();
+        let mut preferred_reg_orders: [Vec<PReg>; 3] = Default::default();
+
         let mut non_preferred_regs_by_class: [HashMap<PReg, Option<VReg>>; 3] = Default::default();
+        let mut non_preferred_reg_orders: [Vec<PReg>; 3] = Default::default();
+
         for i in 0..3 {
             for preg in env.preferred_regs_by_class[i].iter() {
+                preferred_reg_orders[i].push(*preg);
                 preferred_regs_by_class[i].insert(*preg, None);
             }
             for preg in env.non_preferred_regs_by_class[i].iter() {
+                non_preferred_reg_orders[i].push(*preg);
                 non_preferred_regs_by_class[i].insert(*preg, None);
             }
         }
         Self {
+            preferred_reg_orders,
             preferred_regs_by_class,
             non_preferred_regs_by_class,
+            non_preferred_reg_orders,
         }
+    }
+
+    pub fn get(&self, preg: PReg) -> Option<VReg> {
+        let reg_groups = [
+            &self.preferred_regs_by_class,
+            &self.non_preferred_regs_by_class,
+        ];
+        for group in reg_groups {
+            for i in 0..3 {
+                if let Some(res) = group[i].get(&preg) {
+                    return *res;
+                }
+            }
+        }
+        None
+    }
+
+    pub fn is_empty(&self, preg: PReg) -> bool {
+        self.get(preg).is_some()
     }
 
     pub fn in_register(&self, vreg: VReg) -> Option<PReg> {
@@ -41,8 +110,8 @@ impl Machine {
             &self.preferred_regs_by_class,
             &self.non_preferred_regs_by_class,
         ];
-        for group in reg_groups {
-            for i in 0..3 {
+        for i in 0..3 {
+            for group in reg_groups {
                 for (preg, value) in group[i].iter() {
                     if let Some(value) = value.as_ref() {
                         if *value == vreg {
@@ -53,6 +122,55 @@ impl Machine {
             }
         }
         None
+    }
+
+    pub fn assign(&mut self, preg: PReg, vreg: VReg) {
+        // Should we return a move instruction here in case preg is not empty?
+
+        let reg_groups = [
+            &mut self.preferred_regs_by_class,
+            &mut self.non_preferred_regs_by_class,
+        ];
+        for group in reg_groups {
+            for i in 0..3 {
+                if let Some(vreg_slot) = group[i].get_mut(&preg) {
+                    if vreg_slot.is_some() {
+                        todo!("vreg slot is full for {preg:?} and {vreg:?} but still assigned");
+                    }
+                    *vreg_slot = Some(vreg);
+                    return;
+                }
+            }
+        }
+        unreachable!()
+    }
+
+    pub fn def_register(&mut self, op: &Operand) -> Result<Allocation, RegAllocError> {
+        if op.kind() == regalloc2::OperandKind::Use {
+            panic!("got use register in def register");
+        }
+        let reg_groups = [
+            (
+                &mut self.preferred_regs_by_class,
+                &self.preferred_reg_orders,
+            ),
+            (
+                &mut self.non_preferred_regs_by_class,
+                &self.non_preferred_reg_orders,
+            ),
+        ];
+        let class_index = op.class() as usize;
+        for (group, order) in reg_groups {
+            // for try_preg in self.
+            for preg in order[class_index].iter() {
+                if group[class_index][&preg].is_none() {
+                    *group[class_index].get_mut(&preg).unwrap() = Some(op.vreg());
+                    return Ok(Allocation::reg(*preg));
+                }
+            }
+        }
+
+        todo!("could not find a register, need to do something else")
     }
 }
 
@@ -67,7 +185,7 @@ mod winged {
     */
     use super::*;
 
-    use regalloc2::{Allocation, Inst, OperandKind, VReg};
+    use regalloc2::{Inst, OperandKind, VReg};
 
     type VarMap = std::collections::HashMap<VReg, VariableState>;
 
@@ -138,32 +256,46 @@ mod winged {
         // hotness of the variable.
         let mut machine = Machine::new(env);
 
-        let mut allocs: Vec<Allocation> = vec![];
-        let mut inst_alloc_offsets: Vec<u32> = vec![];
+        let mut tracker = AllocationTracker::new();
+
         println!("varmap: {varmap:#?}");
 
         for insn in fun.block_insns(entry_b).iter() {
             let ops = fun.inst_operands(insn);
-            // Check if the current vregs are in registers.
 
             println!("ops: {ops:?}");
             for op in ops {
                 if op.kind() == OperandKind::Use {
-                    if machine.in_register(op.vreg()).is_none() {
-                        todo!("move value into a register")
+                    if !machine.in_register(op.vreg()).is_none() {
+                        todo!("need to move value into a register")
                     }
                 }
                 if op.kind() == OperandKind::Def {
-                    todo!("pick a register")
+                    match op.constraint() {
+                        OperandConstraint::FixedReg(preg) => {
+                            if machine.is_empty(preg) {
+                                machine.assign(preg, op.vreg());
+                            } else {
+                                todo!("got a def on {preg:?} but that is occupied")
+                            }
+                        }
+                        OperandConstraint::Any => {
+                            // Pick any free register.
+                            let alloc = machine.def_register(op)?;
+                            tracker.add_allocation(insn, alloc);
+                        }
+                        _ => todo!("operand constraint: {:?}", op.constraint()),
+                    }
                 }
             }
 
+            // End of instruction, evict anything that is no longer necessary.
             machine.evict_after_inst(insn, &varmap);
         }
 
         Ok(regalloc2::Output {
-            allocs,
-            inst_alloc_offsets,
+            allocs: tracker.allocs(),
+            inst_alloc_offsets: tracker.inst_alloc_offsets(),
             ..Default::default()
         })
     }
