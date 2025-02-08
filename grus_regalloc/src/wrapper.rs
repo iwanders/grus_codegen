@@ -23,6 +23,7 @@ pub struct IrFunction {
     num_values: usize,
     entry_block: RegBlock,
     block_insn: HashMap<RegBlock, InstRange>,
+    block_params: HashMap<RegBlock, Vec<VReg>>,
     inst_info: HashMap<RegInst, InstInfo>,
 }
 
@@ -39,10 +40,24 @@ impl IrFunction {
         );
 
         let mut block_insn: HashMap<RegBlock, InstRange> = Default::default();
+        let mut block_params: HashMap<RegBlock, Vec<VReg>> = Default::default();
+
         for cbl in fun.layout.blocks() {
             // let cbl = IrBlock::from_u32(block.raw_u32());
             let regblock = RegBlock::new(cbl.as_u32() as usize);
             // let block = &fun.dfg.blocks[cbl];
+
+            for v in fun.dfg.block_params(cbl) {
+                let valuetype = fun.dfg.value_type(*v);
+                let regtype = if valuetype.is_int() {
+                    RegClass::Int
+                } else {
+                    RegClass::Float
+                };
+                let vreg = VReg::new(v.as_u32() as usize, regtype);
+                let these_block_params = block_params.entry(regblock).or_default();
+                these_block_params.push(vreg);
+            }
             let mut actual_instructions: Vec<IrInst> = vec![];
             for i in fun.layout.block_insts(cbl) {
                 if let Some(previous) = actual_instructions.last() {
@@ -62,7 +77,6 @@ impl IrFunction {
         }
 
         let mut inst_info: HashMap<RegInst, InstInfo> = Default::default();
-
         for cbl in fun.layout.blocks() {
             for irinst in fun.layout.block_insts(cbl) {
                 let instdata = fun.dfg.insts[irinst];
@@ -122,6 +136,7 @@ impl IrFunction {
             num_values,
             entry_block,
             block_insn,
+            block_params,
             inst_info,
         }
     }
@@ -146,8 +161,8 @@ impl RegFunction for IrFunction {
     fn block_preds(&self, _: regalloc2::Block) -> &[regalloc2::Block] {
         todo!()
     }
-    fn block_params(&self, _: regalloc2::Block) -> &[VReg] {
-        todo!()
+    fn block_params(&self, block: regalloc2::Block) -> &[VReg] {
+        &self.block_params[&block]
     }
     fn is_ret(&self, reginst: regalloc2::Inst) -> bool {
         self.inst_info[&reginst].is_ret
