@@ -1,7 +1,7 @@
 use cranelift_codegen::ir;
 use regalloc2::Function as RegFunction;
 use regalloc2::Output as RegOutput;
-use regalloc2::{MachineEnv, RegAllocError};
+use regalloc2::{MachineEnv, PReg, RegAllocError, VReg};
 
 pub mod wrapper;
 
@@ -10,6 +10,32 @@ Okay... so register allocation. 😰
 Lets just aim to get something naive working first.
 And lets start with local (in-block) allocation only.
 */
+
+use std::collections::HashMap;
+
+pub struct Machine {
+    pub preferred_regs_by_class: [HashMap<PReg, Option<VReg>>; 3],
+    pub non_preferred_regs_by_class: [HashMap<PReg, Option<VReg>>; 3],
+}
+
+impl Machine {
+    pub fn new(env: &regalloc2::MachineEnv) -> Self {
+        let mut preferred_regs_by_class: [HashMap<PReg, Option<VReg>>; 3] = Default::default();
+        let mut non_preferred_regs_by_class: [HashMap<PReg, Option<VReg>>; 3] = Default::default();
+        for i in 0..3 {
+            for preg in env.preferred_regs_by_class[i].iter() {
+                preferred_regs_by_class[i].insert(*preg, None);
+            }
+            for preg in env.non_preferred_regs_by_class[i].iter() {
+                non_preferred_regs_by_class[i].insert(*preg, None);
+            }
+        }
+        Self {
+            preferred_regs_by_class,
+            non_preferred_regs_by_class,
+        }
+    }
+}
 
 mod winged {
     /*
@@ -21,19 +47,20 @@ mod winged {
         If we run out of registers, the least hot variable goes onto the stack.
     */
     use super::*;
-    use regalloc2::Inst as RegInst;
-    use regalloc2::{InstRange, OperandKind, VReg};
+
+    use regalloc2::{Inst, OperandKind, VReg};
 
     pub fn run<F: RegFunction>(fun: &F, env: &MachineEnv) -> Result<RegOutput, RegAllocError> {
-        #[derive(Debug)]
+        #[derive(Debug, Clone)]
         struct VariableState {
             /// Range this variable is alive, first duration is write / creation!
-            duration: std::ops::RangeInclusive<RegInst>,
+            duration: std::ops::RangeInclusive<Inst>,
             /// Instructions for which this variable is used.
-            reads: Vec<RegInst>,
+            reads: Vec<Inst>,
         }
 
         let mut varmap: std::collections::HashMap<VReg, VariableState> = Default::default();
+
         // Do a linear pass to populate the variable states.
         let entry_b = fun.entry_block();
         for entry_vreg in fun.block_params(entry_b) {
@@ -46,7 +73,6 @@ mod winged {
                 },
             );
         }
-
         for insn in fun.block_insns(entry_b).iter() {
             let ops = fun.inst_operands(insn);
             for op in ops {
@@ -68,6 +94,12 @@ mod winged {
                 }
             }
         }
+
+        // Now we have a map of variables and their lifetimes.
+        // Next, we do another pass and track the variables against the machine registers
+        // and keep track which Vreg is in what register, pushing them out or in depending on the
+        // hotness of the variable.
+        let mut machine = Machine::new(env);
 
         println!("varmap: {varmap:#?}");
 
