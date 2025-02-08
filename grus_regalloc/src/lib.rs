@@ -35,6 +35,25 @@ impl Machine {
             non_preferred_regs_by_class,
         }
     }
+
+    pub fn in_register(&self, vreg: VReg) -> Option<PReg> {
+        let reg_groups = [
+            &self.preferred_regs_by_class,
+            &self.non_preferred_regs_by_class,
+        ];
+        for group in reg_groups {
+            for i in 0..3 {
+                for (preg, value) in group[i].iter() {
+                    if let Some(value) = value.as_ref() {
+                        if *value == vreg {
+                            return Some(*preg);
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
 mod winged {
@@ -48,18 +67,36 @@ mod winged {
     */
     use super::*;
 
-    use regalloc2::{Inst, OperandKind, VReg};
+    use regalloc2::{Allocation, Inst, OperandKind, VReg};
+
+    type VarMap = std::collections::HashMap<VReg, VariableState>;
+
+    #[derive(Debug, Clone)]
+    struct VariableState {
+        /// Range this variable is alive, first duration is write / creation!
+        duration: std::ops::RangeInclusive<Inst>,
+        /// Instructions for which this variable is used.
+        reads: Vec<Inst>,
+    }
+
+    impl Machine {
+        fn evict_after_inst(&mut self, current_instruction: Inst, varmap: &VarMap) {
+            // Iterate over preferred and non preferred maps to evict that which is no longer alive.
+            for i in 0..3 {
+                for v in self.preferred_regs_by_class[i].values_mut() {
+                    if let Some(vreg) = v {
+                        let state = &varmap[&vreg];
+                        if state.duration.end().0 <= current_instruction.0 {
+                            *v = None;
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     pub fn run<F: RegFunction>(fun: &F, env: &MachineEnv) -> Result<RegOutput, RegAllocError> {
-        #[derive(Debug, Clone)]
-        struct VariableState {
-            /// Range this variable is alive, first duration is write / creation!
-            duration: std::ops::RangeInclusive<Inst>,
-            /// Instructions for which this variable is used.
-            reads: Vec<Inst>,
-        }
-
-        let mut varmap: std::collections::HashMap<VReg, VariableState> = Default::default();
+        let mut varmap: VarMap = Default::default();
 
         // Do a linear pass to populate the variable states.
         let entry_b = fun.entry_block();
@@ -101,9 +138,32 @@ mod winged {
         // hotness of the variable.
         let mut machine = Machine::new(env);
 
+        let mut allocs: Vec<Allocation> = vec![];
+        let mut inst_alloc_offsets: Vec<u32> = vec![];
         println!("varmap: {varmap:#?}");
 
+        for insn in fun.block_insns(entry_b).iter() {
+            let ops = fun.inst_operands(insn);
+            // Check if the current vregs are in registers.
+
+            println!("ops: {ops:?}");
+            for op in ops {
+                if op.kind() == OperandKind::Use {
+                    if machine.in_register(op.vreg()).is_none() {
+                        todo!("move value into a register")
+                    }
+                }
+                if op.kind() == OperandKind::Def {
+                    todo!("pick a register")
+                }
+            }
+
+            machine.evict_after_inst(insn, &varmap);
+        }
+
         Ok(regalloc2::Output {
+            allocs,
+            inst_alloc_offsets,
             ..Default::default()
         })
     }
