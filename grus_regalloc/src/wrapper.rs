@@ -45,7 +45,7 @@ impl IrFunction {
             // let block = &fun.dfg.blocks[cbl];
             let mut actual_instructions: Vec<IrInst> = vec![];
             for i in fun.layout.block_insts(cbl) {
-                if let Some(previous) = actual_instructions.first() {
+                if let Some(previous) = actual_instructions.last() {
                     let prior_i = previous.as_u32();
                     let current = i.as_u32();
                     if prior_i + 1 != current {
