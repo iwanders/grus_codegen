@@ -135,7 +135,7 @@ impl Machine {
             for i in 0..3 {
                 if let Some(vreg_slot) = group[i].get_mut(&preg) {
                     if vreg_slot.is_some() {
-                        todo!("vreg slot is full for {preg:?} and {vreg:?} but still assigned");
+                        todo!("vreg slot is full for {preg:?} and {vreg:?} but still assigned {vreg_slot:?}");
                     }
                     *vreg_slot = Some(vreg);
                     return;
@@ -218,8 +218,10 @@ mod winged {
 
         // Do a linear pass to populate the variable states.
         let entry_b = fun.entry_block();
+        let mut first_instruction = None;
         for entry_vreg in fun.block_params(entry_b) {
             let insn = fun.block_insns(entry_b).first();
+            first_instruction = Some(insn);
             varmap.insert(
                 *entry_vreg,
                 VariableState {
@@ -249,12 +251,20 @@ mod winged {
 
         for insn in fun.block_insns(entry_b).iter() {
             let ops = fun.inst_operands(insn);
+            let is_early_first_instruction = Some(insn) == first_instruction;
             for stage in [regalloc2::OperandPos::Early, regalloc2::OperandPos::Late] {
                 for op in ops {
                     if op.pos() != stage {
                         continue;
                     }
                     println!("Op: {op:?}, pos: {:?}", op.pos());
+                    if is_early_first_instruction
+                        && op.kind() == OperandKind::Def
+                        && op.pos() == regalloc2::OperandPos::Early
+                    {
+                        continue;
+                    }
+
                     if op.kind() == OperandKind::Def {
                         varmap.insert(
                             op.vreg(),
