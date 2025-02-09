@@ -227,10 +227,14 @@ mod winged {
                     reads: vec![],
                 },
             );
-        }
-        for insn in fun.block_insns(entry_b).iter() {
+            // Handle the first instruction's early defs.
+
             let ops = fun.inst_operands(insn);
             for op in ops {
+                if op.pos() != regalloc2::OperandPos::Early {
+                    continue;
+                }
+                println!("entry instr Op: {op:?}, pos: {:?}", op.pos());
                 if op.kind() == OperandKind::Def {
                     varmap.insert(
                         op.vreg(),
@@ -239,13 +243,34 @@ mod winged {
                             reads: vec![],
                         },
                     );
-                } else if op.kind() == OperandKind::Use {
-                    // it is used, so it MUST be present in the map.
-                    let entry = varmap
-                        .get_mut(&op.vreg())
-                        .expect("encountered vreg never seen before");
-                    entry.duration = *entry.duration.start()..=insn;
-                    entry.reads.push(insn);
+                }
+            }
+        }
+
+        for insn in fun.block_insns(entry_b).iter() {
+            let ops = fun.inst_operands(insn);
+            for stage in [regalloc2::OperandPos::Early, regalloc2::OperandPos::Late] {
+                for op in ops {
+                    if op.pos() != stage {
+                        continue;
+                    }
+                    println!("Op: {op:?}, pos: {:?}", op.pos());
+                    if op.kind() == OperandKind::Def {
+                        varmap.insert(
+                            op.vreg(),
+                            VariableState {
+                                duration: insn..=insn,
+                                reads: vec![],
+                            },
+                        );
+                    } else if op.kind() == OperandKind::Use {
+                        // it is used, so it MUST be present in the map.
+                        let entry = varmap.get_mut(&op.vreg()).expect(&format!(
+                            "encountered vreg {op:?} never seen before at {insn:?}"
+                        ));
+                        entry.duration = *entry.duration.start()..=insn;
+                        entry.reads.push(insn);
+                    }
                 }
             }
         }

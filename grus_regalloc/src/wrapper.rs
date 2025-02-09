@@ -29,8 +29,6 @@ pub struct IrFunction {
 
 impl IrFunction {
     pub fn new(fun: &CraneliftIrFunction) -> Self {
-        todo!("handle input arguments");
-
         let entry_block = RegBlock::new(
             fun.layout
                 .entry_block()
@@ -50,6 +48,7 @@ impl IrFunction {
             let regblock = RegBlock::new(cbl.as_u32() as usize);
             // let block = &fun.dfg.blocks[cbl];
 
+            // Store all block parameter entries.
             for v in fun.dfg.block_params(cbl) {
                 let valuetype = fun.dfg.value_type(*v);
                 let regtype = if valuetype.is_int() {
@@ -134,6 +133,39 @@ impl IrFunction {
             }
         }
 
+        // Find the first instruction in the entry block, into that instruction we'll inject the
+        // function arguments.
+        if let Some(first_insn) = fun
+            .layout
+            .first_inst(fun.layout.entry_block().expect("should have entry block"))
+        {
+            let reg_inst = RegInst::new(first_insn.as_u32() as usize);
+            let first_info = inst_info
+                .get_mut(&reg_inst)
+                .expect("no info for first instruction");
+            let ir_entry_block = fun.layout.entry_block().expect("should have entry block");
+            for (i, v) in fun.dfg.block_params(ir_entry_block).into_iter().enumerate() {
+                let valuetype = fun.dfg.value_type(*v);
+                let regtype = if valuetype.is_int() {
+                    RegClass::Int
+                } else {
+                    RegClass::Float
+                };
+                let vreg = VReg::new(v.as_u32() as usize, regtype);
+                let preg = regalloc2::PReg::new(i as usize, regtype);
+
+                println!("Note to self, hardcoded call convention; {vreg:?} -> {preg:?}");
+                let operand = RegOperand::new(
+                    vreg,
+                    regalloc2::OperandConstraint::FixedReg(preg),
+                    regalloc2::OperandKind::Def,
+                    regalloc2::OperandPos::Early,
+                );
+
+                first_info.operands.push(operand);
+            }
+        }
+
         Self {
             num_insts,
             num_blocks,
@@ -166,11 +198,6 @@ impl RegFunction for IrFunction {
         todo!()
     }
     fn block_params(&self, block: regalloc2::Block) -> &[VReg] {
-        // Stole this trick from cranelift, entry block has no parameters but we insert a first
-        // instruction that populates registers with the input arguments.
-        if block == self.entry_block() {
-            return &[];
-        }
         &self.block_params[&block]
     }
     fn is_ret(&self, reginst: regalloc2::Inst) -> bool {
