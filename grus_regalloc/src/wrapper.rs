@@ -29,15 +29,18 @@ pub struct IrFunction {
 
 impl IrFunction {
     pub fn new(fun: &CraneliftIrFunction) -> Self {
-        let num_insts = fun.stencil.dfg.num_insts();
-        let num_blocks = fun.stencil.dfg.num_blocks();
-        let num_values = fun.dfg.num_values();
+        todo!("handle input arguments");
+
         let entry_block = RegBlock::new(
             fun.layout
                 .entry_block()
                 .expect("regalloc function must have entry block")
                 .as_u32() as usize,
         );
+
+        let num_insts = fun.stencil.dfg.num_insts();
+        let num_blocks = fun.stencil.dfg.num_blocks();
+        let num_values = fun.dfg.num_values();
 
         let mut block_insn: HashMap<RegBlock, InstRange> = Default::default();
         let mut block_params: HashMap<RegBlock, Vec<VReg>> = Default::default();
@@ -58,6 +61,7 @@ impl IrFunction {
                 let these_block_params = block_params.entry(regblock).or_default();
                 these_block_params.push(vreg);
             }
+
             let mut actual_instructions: Vec<IrInst> = vec![];
             for i in fun.layout.block_insts(cbl) {
                 if let Some(previous) = actual_instructions.last() {

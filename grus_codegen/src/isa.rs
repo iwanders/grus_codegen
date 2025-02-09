@@ -78,6 +78,8 @@ impl X86Isa {
 
         let mut buffer = vec![];
 
+        let regs = grus_regalloc::run_ir(&func, &grus_regalloc::simple_int_machine(1, 1))?;
+
         for b in layout.blocks() {
             debug!("b: {b:?}");
             let block_data = &dfg.blocks[b];
