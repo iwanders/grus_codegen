@@ -38,10 +38,8 @@ impl AllocationTracker {
             if *v != inst {
                 self.inst_alloc_offsets.push(self.allocs.len() as u32);
             }
-        } else {
-            self.allocs.push(alloc);
         }
-
+        self.allocs.push(alloc);
         self.previous_inst = Some(inst);
     }
 
@@ -327,11 +325,6 @@ mod winged {
 
             println!("ops: {ops:?}");
             for op in ops {
-                if op.kind() == OperandKind::Use {
-                    if machine.in_register(op.vreg()).is_none() {
-                        todo!("need to move {op:?} value into a register")
-                    }
-                }
                 if op.kind() == OperandKind::Def {
                     if is_early_first_instruction
                         && op.kind() == OperandKind::Def
@@ -354,6 +347,12 @@ mod winged {
                         }
                         _ => todo!("operand constraint: {:?}", op.constraint()),
                     }
+                } else if op.kind() == OperandKind::Use {
+                    if machine.in_register(op.vreg()).is_none() {
+                        todo!("need to move {op:?} value into a register")
+                    }
+                    let alloc = machine.in_register(op.vreg()).unwrap();
+                    tracker.add_allocation(insn, Allocation::reg(alloc));
                 }
             }
 
