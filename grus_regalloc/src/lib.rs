@@ -53,6 +53,7 @@ impl AllocationTracker {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Machine {
     pub preferred_reg_orders: [Vec<PReg>; 3],
     pub preferred_regs_by_class: [HashMap<PReg, Option<VReg>>; 3],
@@ -102,7 +103,7 @@ impl Machine {
     }
 
     pub fn is_empty(&self, preg: PReg) -> bool {
-        self.get(preg).is_some()
+        self.get(preg).is_none()
     }
 
     pub fn in_register(&self, vreg: VReg) -> Option<PReg> {
@@ -205,6 +206,7 @@ mod winged {
                     if let Some(vreg) = v {
                         let state = &varmap[&vreg];
                         if state.duration.end().0 <= current_instruction.0 {
+                            println!("evicted {vreg:?}");
                             *v = None;
                         }
                     }
@@ -295,17 +297,48 @@ mod winged {
 
         println!("varmap: {varmap:#?}");
 
+        // Populate the machine with the early def's from the first instruction.
+        let ops = fun.inst_operands(
+            *first_instruction
+                .as_ref()
+                .expect("must have first instruction"),
+        );
+        for op in ops {
+            println!("op; {op:#?}");
+            println!("Machine; {machine:#?}");
+            if op.kind() == OperandKind::Def && op.pos() == regalloc2::OperandPos::Early {
+                match op.constraint() {
+                    OperandConstraint::FixedReg(preg) => {
+                        if machine.is_empty(preg) {
+                            machine.assign(preg, op.vreg());
+                        } else {
+                            todo!("got a def on {preg:?} but that is occupied")
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        println!("Machine; {machine:#?}");
+
         for insn in fun.block_insns(entry_b).iter() {
             let ops = fun.inst_operands(insn);
+            let is_early_first_instruction = Some(insn) == first_instruction;
 
             println!("ops: {ops:?}");
             for op in ops {
                 if op.kind() == OperandKind::Use {
-                    if !machine.in_register(op.vreg()).is_none() {
-                        todo!("need to move value into a register")
+                    if machine.in_register(op.vreg()).is_none() {
+                        todo!("need to move {op:?} value into a register")
                     }
                 }
                 if op.kind() == OperandKind::Def {
+                    if is_early_first_instruction
+                        && op.kind() == OperandKind::Def
+                        && op.pos() == regalloc2::OperandPos::Early
+                    {
+                        continue;
+                    }
                     match op.constraint() {
                         OperandConstraint::FixedReg(preg) => {
                             if machine.is_empty(preg) {

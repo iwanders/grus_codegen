@@ -10,3 +10,5 @@ license = "Apache-2.0 WITH LLVM-exception"
 anyhow = { workspace = true }
 regalloc2 = { workspace = true }
 cranelift-codegen = { workspace = true }
+
+thiserror = { workspace = true }

@@ -445,6 +445,7 @@ dependencies = [
  "anyhow",
  "cranelift-codegen",
  "regalloc2",
+ "thiserror",
 ]
 
 [[package]]
