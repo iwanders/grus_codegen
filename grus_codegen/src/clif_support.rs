@@ -160,9 +160,28 @@ pub fn test_files<P: AsRef<std::path::Path> + std::fmt::Debug>(files: &[P]) -> R
     Ok(all_passed)
 }
 
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum RegisterMachine {
+    Int2,
+    Int4,
+    Int8,
+}
+impl RegisterMachine {
+    pub fn to_env(&self) -> regalloc2::MachineEnv {
+        match *self {
+            RegisterMachine::Int2 => grus_regalloc::simple_int_machine(1, 1),
+            RegisterMachine::Int4 => grus_regalloc::simple_int_machine(4, 4),
+            RegisterMachine::Int8 => grus_regalloc::simple_int_machine(8, 8),
+        }
+    }
+}
+
 pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
     file: &P,
     fun_index: usize,
+    regmachine: RegisterMachine,
 ) -> Result<()> {
     let f = std::fs::read_to_string(&file).context(format!("failed to open {file:?}"))?;
     let test_file = cranelift_reader::parse_test(&f, Default::default())?;
@@ -174,7 +193,7 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
         .context(format!("fun index {fun_index} out of bounds"))?;
     let function = &function.0;
 
-    grus_regalloc::run_ir(&function, &grus_regalloc::default_env())?;
+    grus_regalloc::run_ir(&function, &regmachine.to_env())?;
 
     Ok(())
 }

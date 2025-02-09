@@ -162,6 +162,11 @@ impl RegFunction for IrFunction {
         todo!()
     }
     fn block_params(&self, block: regalloc2::Block) -> &[VReg] {
+        // Stole this trick from cranelift, entry block has no parameters but we insert a first
+        // instruction that populates registers with the input arguments.
+        if block == self.entry_block() {
+            return &[];
+        }
         &self.block_params[&block]
     }
     fn is_ret(&self, reginst: regalloc2::Inst) -> bool {

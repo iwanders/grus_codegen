@@ -2,7 +2,7 @@ use cranelift_codegen::ir;
 use regalloc2::Function as RegFunction;
 use regalloc2::Output as RegOutput;
 use regalloc2::{
-    Allocation, Inst, MachineEnv, Operand, OperandConstraint, PReg, RegAllocError, VReg,
+    Allocation, Inst, MachineEnv, Operand, OperandConstraint, PReg, RegAllocError, RegClass, VReg,
 };
 
 pub mod wrapper;
@@ -311,6 +311,21 @@ pub fn default_env() -> MachineEnv {
     regalloc2::MachineEnv {
         preferred_regs_by_class: [vec![], vec![], vec![]],
         non_preferred_regs_by_class: [vec![], vec![], vec![]],
+        scratch_by_class: [None, None, None],
+        fixed_stack_slots: vec![],
+    }
+}
+
+pub fn simple_int_machine(pref: usize, non_pref: usize) -> MachineEnv {
+    let pref_regs = (0..pref)
+        .map(|z| PReg::new(z, RegClass::Int))
+        .collect::<Vec<_>>();
+    let non_pref_regs = (0..non_pref)
+        .map(|z| PReg::new(z, RegClass::Int))
+        .collect::<Vec<_>>();
+    regalloc2::MachineEnv {
+        preferred_regs_by_class: [pref_regs, vec![], vec![]],
+        non_preferred_regs_by_class: [non_pref_regs, vec![], vec![]],
         scratch_by_class: [None, None, None],
         fixed_stack_slots: vec![],
     }

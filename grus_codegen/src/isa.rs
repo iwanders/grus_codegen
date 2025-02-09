@@ -85,6 +85,7 @@ impl X86Isa {
                 "block_data params: {:?}",
                 block_data.params(&dfg.value_lists)
             );
+
             for inst in layout.block_insts(b) {
                 debug!("inst: {inst:?}");
                 let instdata = dfg.insts[inst];
