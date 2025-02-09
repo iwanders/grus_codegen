@@ -31,9 +31,14 @@ struct AllocationTracker {
 
 impl AllocationTracker {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            allocs: vec![],
+            inst_alloc_offsets: vec![0],
+            previous_inst: None,
+        }
     }
     pub fn add_allocation(&mut self, inst: Inst, alloc: Allocation) {
+        println!("adding allocation for {inst:?} and {alloc:?}");
         if let Some(v) = self.previous_inst.as_mut() {
             if *v != inst {
                 self.inst_alloc_offsets.push(self.allocs.len() as u32);
@@ -303,7 +308,7 @@ mod winged {
         );
         for op in ops {
             println!("op; {op:#?}");
-            println!("Machine; {machine:#?}");
+            // println!("Machine; {machine:#?}");
             if op.kind() == OperandKind::Def && op.pos() == regalloc2::OperandPos::Early {
                 match op.constraint() {
                     OperandConstraint::FixedReg(preg) => {
@@ -321,21 +326,19 @@ mod winged {
 
         for insn in fun.block_insns(entry_b).iter() {
             let ops = fun.inst_operands(insn);
-            let is_early_first_instruction = Some(insn) == first_instruction;
+            let is_first_instruction = Some(insn) == first_instruction;
 
-            println!("ops: {ops:?}");
+            println!("ops: {ops:?} insn: {insn:?}");
             for op in ops {
                 if op.kind() == OperandKind::Def {
-                    if is_early_first_instruction
-                        && op.kind() == OperandKind::Def
-                        && op.pos() == regalloc2::OperandPos::Early
-                    {
+                    if is_first_instruction && op.pos() == regalloc2::OperandPos::Early {
                         continue;
                     }
                     match op.constraint() {
                         OperandConstraint::FixedReg(preg) => {
                             if machine.is_empty(preg) {
                                 machine.assign(preg, op.vreg());
+                                tracker.add_allocation(insn, Allocation::reg(preg));
                             } else {
                                 todo!("got a def on {preg:?} but that is occupied")
                             }

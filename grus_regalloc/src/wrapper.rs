@@ -75,7 +75,7 @@ impl IrFunction {
             let start = actual_instructions.first().unwrap();
             let last = actual_instructions.last().unwrap();
             let start = RegInst::new(start.as_u32() as usize);
-            let last = RegInst::new(last.as_u32() as usize);
+            let last = RegInst::new(last.as_u32() as usize + 1);
             block_insn.insert(regblock, InstRange::new(start, last));
         }
 
@@ -88,6 +88,7 @@ impl IrFunction {
 
                 // Input arguments to instruction.
                 let arguments = instdata.arguments(&fun.dfg.value_lists);
+                // println!("Adding arguments to ir inst: {arguments:?} {irinst:?}");
                 for v in arguments {
                     let valuetype = fun.dfg.value_type(*v);
                     let regtype = if valuetype.is_int() {
@@ -128,6 +129,7 @@ impl IrFunction {
                     is_branch,
                     operands,
                 };
+                println!(" irinst {irinst:?} with {info:?}");
                 let reg_inst = RegInst::new(irinst.as_u32() as usize);
                 inst_info.insert(reg_inst, info);
             }
