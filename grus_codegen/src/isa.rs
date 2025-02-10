@@ -141,30 +141,25 @@ impl X86Isa {
                 );
                 debug!("  opcode: {:?}", instdata.opcode());
 
-                // We also don't have the types here... do WE have to propagate those?
                 match instdata {
-                    InstructionData::UnaryImm { opcode, imm } => {
-                        // How do we know where this goes..
-                        // Immediate to register, p2487
-                        match opcode {
-                            ir::Opcode::Iconst => {
-                                let xinst = cg::Instruction::op(
-                                    Op::Mov(Width::W64),
-                                    &[
-                                        Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap())),
-                                        Operand::Immediate(imm.bits()),
-                                    ],
-                                );
-                                buffer.append(&mut xinst.serialize()?);
-                            }
-                            _ => todo!(
-                                "unimplemented opcode: {:?} in {:?}, of {:?}",
-                                opcode,
-                                b,
-                                func.name
-                            ),
+                    InstructionData::UnaryImm { opcode, imm } => match opcode {
+                        ir::Opcode::Iconst => {
+                            let xinst = cg::Instruction::op(
+                                Op::Mov(Width::W64),
+                                &[
+                                    Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap())),
+                                    Operand::Immediate(imm.bits()),
+                                ],
+                            );
+                            buffer.append(&mut xinst.serialize()?);
                         }
-                    }
+                        _ => todo!(
+                            "unimplemented opcode: {:?} in {:?}, of {:?}",
+                            opcode,
+                            b,
+                            func.name
+                        ),
+                    },
                     InstructionData::MultiAry { opcode, args } => match opcode {
                         ir::Opcode::Return => {
                             println!("  Return  args: {args:?}");
@@ -193,33 +188,53 @@ impl X86Isa {
                                 .with_context(|| format!("could not determine width"))?
                                 .into();
 
-                            // x86 add overwrites the first operand... so... yay.
-                            // Move the first operand into scratch.
-                            let xinst = cg::Instruction::op(
-                                Op::Mov(width),
-                                &[
-                                    Operand::Reg(scratch),
-                                    Operand::Reg(rg2x(use_allocs[0].as_reg().unwrap())),
-                                ],
-                            );
-                            buffer.append(&mut xinst.serialize()?);
-                            let xinst = cg::Instruction::op(
-                                Op::Add(width),
-                                &[
-                                    Operand::Reg(scratch),
-                                    Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap())),
-                                ],
-                            );
-                            buffer.append(&mut xinst.serialize()?);
-                            // Now scratch holds the desired outcome.
-                            let xinst = cg::Instruction::op(
-                                Op::Mov(width),
-                                &[
-                                    Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap())),
-                                    Operand::Reg(scratch),
-                                ],
-                            );
-                            buffer.append(&mut xinst.serialize()?);
+                            // x86 add overwrites the first operand...
+                            // let move_add_move = true;
+                            let move_add_move = false;
+                            if move_add_move {
+                                //   Move the first operand into scratch.
+                                //   Add second operand to scratch.
+                                //   Move scratch to destination.
+                                let xinst = cg::Instruction::op(
+                                    Op::Mov(width),
+                                    &[
+                                        Operand::Reg(scratch),
+                                        Operand::Reg(rg2x(use_allocs[0].as_reg().unwrap())),
+                                    ],
+                                );
+                                buffer.append(&mut xinst.serialize()?);
+                                let xinst = cg::Instruction::op(
+                                    Op::Add(width),
+                                    &[
+                                        Operand::Reg(scratch),
+                                        Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap())),
+                                    ],
+                                );
+                                buffer.append(&mut xinst.serialize()?);
+                                // Now scratch holds the desired outcome.
+                                let xinst = cg::Instruction::op(
+                                    Op::Mov(width),
+                                    &[
+                                        Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap())),
+                                        Operand::Reg(scratch),
+                                    ],
+                                );
+                                buffer.append(&mut xinst.serialize()?);
+                            } else {
+                                // Move operand one into destination.
+                                // Move add operand two to destination.
+                                let dest = Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap()));
+                                let xinst = cg::Instruction::op(
+                                    Op::Mov(width),
+                                    &[dest, Operand::Reg(rg2x(use_allocs[0].as_reg().unwrap()))],
+                                );
+                                buffer.append(&mut xinst.serialize()?);
+                                let xinst = cg::Instruction::op(
+                                    Op::Add(width),
+                                    &[dest, Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap()))],
+                                );
+                                buffer.append(&mut xinst.serialize()?);
+                            }
 
                             // That leaves the result in EDI, so move it to EAX to be ready for the return.
                             // buffer.append(&mut xinst.serialize()?);
