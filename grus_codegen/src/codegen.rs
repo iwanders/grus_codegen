@@ -36,7 +36,7 @@ impl Op {
         match self {
             Op::Mov(_) => 2..=2,
             Op::Add(_) => 2..=2,
-            _ => 0..=0,
+            Op::Return => 0..=0,
         }
     }
 }
@@ -54,6 +54,9 @@ impl Reg {
     pub const EDI: Reg = Reg(0b111);
     pub fn index(&self) -> u8 {
         self.0
+    }
+    pub fn from(v: u8) -> Self {
+        Reg(v)
     }
 }
 

@@ -193,7 +193,8 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
         .context(format!("fun index {fun_index} out of bounds"))?;
     let function = &function.0;
 
-    grus_regalloc::run_ir(&function, &regmachine.to_env())?;
+    let res = grus_regalloc::run_ir(&function, &regmachine.to_env())?;
+    println!("res: {res:#?}");
 
     Ok(())
 }

@@ -1,4 +1,5 @@
 use cranelift_codegen::ir::{self, Function, InstructionData};
+use regalloc2::Inst as RegInst;
 
 use anyhow::Context;
 use log::*;
@@ -78,7 +79,28 @@ impl X86Isa {
 
         let mut buffer = vec![];
 
-        let regs = grus_regalloc::run_ir(&func, &grus_regalloc::simple_int_machine(1, 1))?;
+        // Call convention is kinda hardcoded on the regalloc side...
+        // reg0 is arg 0; EDI, Diane's
+        // reg1 is arg 1; ESI, Silk
+        // reg2 is arg 2; EDX, Dress
+        // reg3 is arg 3; ECX, Costs
+        // reg4 is arg 4; r8?, 8
+        // reg5 is arg 5; r9?, 9$
+
+        // And regalloc uses 'n' registers from 0..n.
+        // So we need to map those to something.
+        let regmap = [
+            Reg::EDI, // PReg(0),
+            Reg::ESI, // PReg(1),
+            Reg::EDX, // PReg(2),
+            Reg::ECX, // PReg(3),
+                      // Reg::EDI, // PReg(4),
+        ];
+        let rg2x = |p: regalloc2::PReg| regmap[p.index() as usize];
+        let scratch = Reg::EBX;
+
+        let regs = grus_regalloc::run_ir(&func, &grus_regalloc::simple_int_machine(4, 4))?;
+        debug!(" regs: {regs:#?}");
 
         for b in layout.blocks() {
             debug!("b: {b:?}");
@@ -97,6 +119,13 @@ impl X86Isa {
                 let types_of =
                     |v: &[ir::Value]| v.iter().map(|z| dfg.value_type(*z)).collect::<Vec<_>>();
                 debug!("  args: {:?} types: {:?}", arguments, types_of(&arguments));
+
+                let allocs_args = regs.inst_allocs(RegInst::new(inst.as_u32() as usize));
+                debug!("  allocs: {allocs_args:?}");
+                let use_allocs = &allocs_args[0..arguments.len()];
+                debug!("  use_allocs: {use_allocs:?}");
+                let def_allocs = &allocs_args[arguments.len().min(arguments.len() + 1)..];
+                debug!("  def_allocs: {def_allocs:?}");
 
                 debug!(
                     "  results? {:?} -> {:?}  (types: {:?}) ",
@@ -136,6 +165,14 @@ impl X86Isa {
                     InstructionData::MultiAry { opcode, args } => match opcode {
                         ir::Opcode::Return => {
                             println!("  Return  args: {args:?}");
+                            let xinst = cg::Instruction::op(
+                                Op::Mov(Width::W64),
+                                &[
+                                    Operand::Reg(Reg::EAX),
+                                    Operand::Reg(rg2x(use_allocs[0].as_reg().unwrap())),
+                                ],
+                            );
+                            buffer.append(&mut xinst.serialize()?);
                             buffer.append(&mut cg::Instruction::op(Op::Return, &[]).serialize()?);
                         }
                         _ => todo!(
@@ -152,18 +189,42 @@ impl X86Isa {
                                 .map(|z| type_of(z))
                                 .with_context(|| format!("could not determine width"))?
                                 .into();
+
+                            // x86 add overwrites the first operand... so... yay.
+                            // Move the first operand into scratch.
+                            let xinst = cg::Instruction::op(
+                                Op::Mov(width),
+                                &[
+                                    Operand::Reg(scratch),
+                                    Operand::Reg(rg2x(use_allocs[0].as_reg().unwrap())),
+                                ],
+                            );
+                            buffer.append(&mut xinst.serialize()?);
                             let xinst = cg::Instruction::op(
                                 Op::Add(width),
-                                &[Operand::Reg(Reg::EDI), Operand::Reg(Reg::ESI)],
+                                &[
+                                    Operand::Reg(scratch),
+                                    Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap())),
+                                ],
                             );
+                            buffer.append(&mut xinst.serialize()?);
+                            // Now scratch holds the desired outcome.
+                            let xinst = cg::Instruction::op(
+                                Op::Mov(width),
+                                &[
+                                    Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap())),
+                                    Operand::Reg(scratch),
+                                ],
+                            );
+                            buffer.append(&mut xinst.serialize()?);
 
                             // That leaves the result in EDI, so move it to EAX to be ready for the return.
-                            buffer.append(&mut xinst.serialize()?);
-                            let xinst = cg::Instruction::op(
-                                Op::Mov(Width::W64),
-                                &[Operand::Reg(Reg::EAX), Operand::Reg(Reg::EDI)],
-                            );
-                            buffer.append(&mut xinst.serialize()?);
+                            // buffer.append(&mut xinst.serialize()?);
+                            // let xinst = cg::Instruction::op(
+                            // Op::Mov(Width::W64),
+                            // &[Operand::Reg(Reg::EAX), Operand::Reg(Reg::EDI)],
+                            // );
+                            // buffer.append(&mut xinst.serialize()?);
                         }
                         _ => todo!(
                             "unimplemented opcode: {:?} in {:?}, of {:?}",
