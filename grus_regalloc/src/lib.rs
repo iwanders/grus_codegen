@@ -223,10 +223,10 @@ mod winged {
 
         // Do a linear pass to populate the variable states.
         let entry_b = fun.entry_block();
-        let mut first_instruction = None;
+        // let mut first_instruction = None;
+        let insn = fun.block_insns(entry_b).first();
+        let first_instruction = Some(insn);
         for entry_vreg in fun.block_params(entry_b) {
-            let insn = fun.block_insns(entry_b).first();
-            first_instruction = Some(insn);
             varmap.insert(
                 *entry_vreg,
                 VariableState {
@@ -235,7 +235,6 @@ mod winged {
                 },
             );
             // Handle the first instruction's early defs.
-
             let ops = fun.inst_operands(insn);
             for op in ops {
                 if op.pos() != regalloc2::OperandPos::Early {

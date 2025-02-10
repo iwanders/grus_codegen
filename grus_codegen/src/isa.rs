@@ -150,7 +150,10 @@ impl X86Isa {
                             ir::Opcode::Iconst => {
                                 let xinst = cg::Instruction::op(
                                     Op::Mov(Width::W64),
-                                    &[Operand::Reg(Reg::EAX), Operand::Immediate(imm.bits())],
+                                    &[
+                                        Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap())),
+                                        Operand::Immediate(imm.bits()),
+                                    ],
                                 );
                                 buffer.append(&mut xinst.serialize()?);
                             }

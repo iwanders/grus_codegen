@@ -49,6 +49,7 @@ impl IrFunction {
             // let block = &fun.dfg.blocks[cbl];
 
             // Store all block parameter entries.
+            let these_block_params = block_params.entry(regblock).or_default();
             for v in fun.dfg.block_params(cbl) {
                 let valuetype = fun.dfg.value_type(*v);
                 let regtype = if valuetype.is_int() {
@@ -57,7 +58,6 @@ impl IrFunction {
                     RegClass::Float
                 };
                 let vreg = VReg::new(v.as_u32() as usize, regtype);
-                let these_block_params = block_params.entry(regblock).or_default();
                 these_block_params.push(vreg);
             }
 
@@ -72,6 +72,7 @@ impl IrFunction {
                 }
                 actual_instructions.push(i);
             }
+            println!("actual_instructions: {actual_instructions:?}");
             let start = actual_instructions.first().unwrap();
             let last = actual_instructions.last().unwrap();
             let start = RegInst::new(start.as_u32() as usize);
