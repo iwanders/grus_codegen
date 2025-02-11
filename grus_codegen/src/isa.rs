@@ -225,6 +225,27 @@ impl X86Isa {
                             );
                             buffer.append(&mut xinst.serialize()?);
                         }
+                        ir::Opcode::Imul => {
+                            let width: Width = typevar_operand
+                                .as_ref()
+                                .map(|z| type_of(z))
+                                .with_context(|| format!("could not determine width"))?
+                                .into();
+
+                            // x86 integer mul supports three forms, we use the two-operand
+                            // version here, this multiplies into the destination.
+                            let dest = Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap()));
+                            let xinst = cg::Instruction::op(
+                                Op::Mov(width),
+                                &[dest, Operand::Reg(rg2x(use_allocs[0].as_reg().unwrap()))],
+                            );
+                            buffer.append(&mut xinst.serialize()?);
+                            let xinst = cg::Instruction::op(
+                                Op::IMul(width),
+                                &[dest, Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap()))],
+                            );
+                            buffer.append(&mut xinst.serialize()?);
+                        }
                         _ => todo!(
                             "unimplemented opcode: {:?} in {:?}, of {:?}",
                             opcode,

@@ -29,6 +29,7 @@ pub enum Op {
     Mov(Width),
     Add(Width),
     Sub(Width),
+    IMul(Width),
     Return,
 }
 
@@ -38,6 +39,7 @@ impl Op {
             Op::Mov(_) => 2..=2,
             Op::Add(_) => 2..=2,
             Op::Sub(_) => 2..=2,
+            Op::IMul(_) => 2..=2, // heh, technically 1..=3... with 3 only with intermediate, 1 for eax
             Op::Return => 0..=0,
         }
     }
@@ -251,6 +253,28 @@ impl Instruction {
                         let (rex, modrm) = Self::addr_regs(r, b, width)?;
                         v.push(rex.into());
                         v.push(0x2B);
+                        v.push(modrm.into());
+                    }
+                    (Operand::Reg(_r), Operand::Immediate(_b)) => {
+                        todo!()
+                    }
+                    _ => todo!(),
+                }
+            }
+            Op::IMul(width) => {
+                if self.operands.len() != 2 {
+                    todo!()
+                }
+
+                let dest = self.operands[0];
+                let src = self.operands[1];
+                match (dest, src) {
+                    (Operand::Reg(r), Operand::Reg(b)) => {
+                        // Mul destination (first) to second, then stores result in destination.
+                        let (rex, modrm) = Self::addr_regs(r, b, width)?;
+                        v.push(rex.into());
+                        v.push(0x0F);
+                        v.push(0xAF);
                         v.push(modrm.into());
                     }
                     (Operand::Reg(_r), Operand::Immediate(_b)) => {
