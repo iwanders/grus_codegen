@@ -27,8 +27,8 @@ pub enum CodegenError {
 #[derive(Debug, Copy, Clone)]
 pub enum Op {
     Mov(Width),
-    Add(Width),
-    Sub(Width),
+    IAdd(Width),
+    ISub(Width),
     IMul(Width),
     Return,
 }
@@ -37,8 +37,8 @@ impl Op {
     pub fn operand_range(&self) -> OperandRange {
         match self {
             Op::Mov(_) => 2..=2,
-            Op::Add(_) => 2..=2,
-            Op::Sub(_) => 2..=2,
+            Op::IAdd(_) => 2..=2,
+            Op::ISub(_) => 2..=2,
             Op::IMul(_) => 2..=2, // heh, technically 1..=3... with 3 only with intermediate, 1 for eax
             Op::Return => 0..=0,
         }
@@ -56,6 +56,17 @@ impl Reg {
     pub const ESP: Reg = Reg(0b100);
     pub const ESI: Reg = Reg(0b110);
     pub const EDI: Reg = Reg(0b111);
+
+    // And the 64 bits extended registers.
+    pub const R8: Reg = Reg(0b1000);
+    pub const R9: Reg = Reg(0b1001);
+    pub const R10: Reg = Reg(0b1010);
+    pub const R11: Reg = Reg(0b1011);
+    pub const R12: Reg = Reg(0b1101);
+    pub const R13: Reg = Reg(0b1100);
+    pub const R14: Reg = Reg(0b1110);
+    pub const R15: Reg = Reg(0b1111);
+
     pub fn index(&self) -> u8 {
         self.0
     }
@@ -226,7 +237,7 @@ impl Instruction {
                     _ => todo!(),
                 }
             }
-            Op::Add(width) => {
+            Op::IAdd(width) => {
                 let dest = self.operands[0];
                 let src = self.operands[1];
                 match (dest, src) {
@@ -244,7 +255,7 @@ impl Instruction {
                     _ => todo!(),
                 }
             }
-            Op::Sub(width) => {
+            Op::ISub(width) => {
                 let dest = self.operands[0];
                 let src = self.operands[1];
                 match (dest, src) {
@@ -262,10 +273,6 @@ impl Instruction {
                 }
             }
             Op::IMul(width) => {
-                if self.operands.len() != 2 {
-                    todo!()
-                }
-
                 let dest = self.operands[0];
                 let src = self.operands[1];
                 match (dest, src) {
@@ -284,7 +291,7 @@ impl Instruction {
                 }
             }
             Op::Return => {
-                const RETN: u8 = 0xc3;
+                const RETN: u8 = 0xC3;
                 v.push(RETN);
             }
         }

@@ -390,7 +390,7 @@ pub fn simple_int_machine(pref: usize, non_pref: usize) -> MachineEnv {
         .map(|z| PReg::new(z, RegClass::Int))
         .collect::<Vec<_>>();
     let non_pref_regs = (0..non_pref)
-        .map(|z| PReg::new(z, RegClass::Int))
+        .map(|z| PReg::new(z + pref, RegClass::Int))
         .collect::<Vec<_>>();
     regalloc2::MachineEnv {
         preferred_regs_by_class: [pref_regs, vec![], vec![]],

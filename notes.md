@@ -8,7 +8,7 @@
 - [ ] Handle multiple blocks (so for loops first, then jumptables?)
 - [ ] Handle if statement.
 - Fold immediate values into the x86 instruction? How do we support this? Need to see that the value
-  in the SSA is only used once, and then collapse it?
+  in the SSA is only used once, and then collapse it? This holds for (IAdd, ISub, IMul)
 - Add an indirection between the regalloc Function and IrFunction?
 - Visualiser for the register allocator?
 - [x] Subtracting integers.

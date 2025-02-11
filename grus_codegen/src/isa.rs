@@ -89,12 +89,15 @@ impl X86Isa {
 
         // And regalloc uses 'n' registers from 0..n.
         // So we need to map those to something.
+        let limit_regs_4 = true;
         let regmap = [
             Reg::EDI, // PReg(0),
             Reg::ESI, // PReg(1),
             Reg::EDX, // PReg(2),
             Reg::ECX, // PReg(3),
-                      // Reg::EDI, // PReg(4),
+                      // Reg::R8,  // PReg(4),
+                      // Reg::R9,  // PReg(5),
+                      // Reg::R10, Reg::R11, Reg::R12, Reg::R13, Reg::R14, Reg::R15
         ];
         let rg2x = |p: regalloc2::PReg| regmap[p.index() as usize];
         // let scratch = Reg::EBX;
@@ -198,7 +201,7 @@ impl X86Isa {
                             );
                             buffer.append(&mut xinst.serialize()?);
                             let xinst = cg::Instruction::op(
-                                Op::Add(width),
+                                Op::IAdd(width),
                                 &[dest, Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap()))],
                             );
                             buffer.append(&mut xinst.serialize()?);
@@ -220,7 +223,7 @@ impl X86Isa {
                             );
                             buffer.append(&mut xinst.serialize()?);
                             let xinst = cg::Instruction::op(
-                                Op::Sub(width),
+                                Op::ISub(width),
                                 &[dest, Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap()))],
                             );
                             buffer.append(&mut xinst.serialize()?);
