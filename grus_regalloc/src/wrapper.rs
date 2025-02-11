@@ -24,6 +24,7 @@ pub struct IrFunction {
     entry_block: RegBlock,
     block_insn: HashMap<RegBlock, InstRange>,
     block_params: HashMap<RegBlock, Vec<VReg>>,
+    block_succs: HashMap<RegBlock, Vec<RegBlock>>,
     inst_info: HashMap<RegInst, InstInfo>,
 }
 
@@ -42,6 +43,7 @@ impl IrFunction {
 
         let mut block_insn: HashMap<RegBlock, InstRange> = Default::default();
         let mut block_params: HashMap<RegBlock, Vec<VReg>> = Default::default();
+        let mut block_succs: HashMap<RegBlock, Vec<RegBlock>> = Default::default();
 
         for cbl in fun.layout.blocks() {
             // let cbl = IrBlock::from_u32(block.raw_u32());
@@ -78,6 +80,14 @@ impl IrFunction {
             let start = RegInst::new(start.as_u32() as usize);
             let last = RegInst::new(last.as_u32() as usize + 1);
             block_insn.insert(regblock, InstRange::new(start, last));
+
+            block_succs.insert(
+                regblock,
+                fun.stencil
+                    .block_successors(cbl)
+                    .map(|v| RegBlock::new(v.as_u32() as usize))
+                    .collect(),
+            );
         }
 
         let mut inst_info: HashMap<RegInst, InstInfo> = Default::default();
@@ -176,6 +186,7 @@ impl IrFunction {
             entry_block,
             block_insn,
             block_params,
+            block_succs,
             inst_info,
         }
     }
@@ -194,8 +205,8 @@ impl RegFunction for IrFunction {
     fn block_insns(&self, block: regalloc2::Block) -> InstRange {
         self.block_insn[&block]
     }
-    fn block_succs(&self, _: regalloc2::Block) -> &[regalloc2::Block] {
-        todo!()
+    fn block_succs(&self, block: regalloc2::Block) -> &[regalloc2::Block] {
+        &self.block_succs[&block]
     }
     fn block_preds(&self, _: regalloc2::Block) -> &[regalloc2::Block] {
         todo!()
