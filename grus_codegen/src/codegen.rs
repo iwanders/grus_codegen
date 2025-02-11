@@ -28,6 +28,7 @@ pub enum CodegenError {
 pub enum Op {
     Mov(Width),
     Add(Width),
+    Sub(Width),
     Return,
 }
 
@@ -36,6 +37,7 @@ impl Op {
         match self {
             Op::Mov(_) => 2..=2,
             Op::Add(_) => 2..=2,
+            Op::Sub(_) => 2..=2,
             Op::Return => 0..=0,
         }
     }
@@ -232,6 +234,23 @@ impl Instruction {
                         let (rex, modrm) = Self::addr_regs(r, b, width)?;
                         v.push(rex.into());
                         v.push(0x03);
+                        v.push(modrm.into());
+                    }
+                    (Operand::Reg(_r), Operand::Immediate(_b)) => {
+                        todo!()
+                    }
+                    _ => todo!(),
+                }
+            }
+            Op::Sub(width) => {
+                let dest = self.operands[0];
+                let src = self.operands[1];
+                match (dest, src) {
+                    (Operand::Reg(r), Operand::Reg(b)) => {
+                        // Sub destination (first) to second, then stores result in destination.
+                        let (rex, modrm) = Self::addr_regs(r, b, width)?;
+                        v.push(rex.into());
+                        v.push(0x2B);
                         v.push(modrm.into());
                     }
                     (Operand::Reg(_r), Operand::Immediate(_b)) => {

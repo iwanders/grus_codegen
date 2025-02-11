@@ -1,0 +1,83 @@
+test interpret
+test run
+target aarch64
+target s390x
+target x86_64
+target riscv64 has_m
+target riscv64 has_c has_zcb
+target pulley32
+target pulley32be
+target pulley64
+target pulley64be
+
+; From 
+; https://github.com/bytecodealliance/wasmtime/blob/a0338af84f66cb452fdf4b692d4facb5d052c12d/cranelift/filetests/filetests/runtests/arithmetic.clif
+
+
+function %sub_i64(i64, i64) -> i64 {
+block0(v0: i64,v1: i64):
+    v2 = isub v0, v1
+    return v2
+}
+; run: %sub_i64(0, 0) == 0
+; run: %sub_i64(0, 1) == -1
+; run: %sub_i64(1, 0) == 1
+; run: %sub_i64(-1, 0) == -1
+; run: %sub_i64(-1, 1) == -2
+; run: %sub_i64(0x80000000_00000000, 0x7FFFFFFF_FFFFFFFF) == 1
+; run: %sub_i64(0xFFFFFFFF_FFFFFFFF, 0xFEDCBA98_76543210) == 0x01234567_89ABCDEF
+; run: %sub_i64(0xABBABBAB_BABBABBA, 0x0BB0BB0B_B0BB0BB0) == 0xA00A00A0_0A00A00A
+; run: %sub_i64(0xC0FFEEEE_C0FFEEEE, 0xDECAFFFF_DECAFFFF) == 0xE234EEEE_E234EEEF
+
+function %sub_i32(i32, i32) -> i32 {
+block0(v0: i32,v1: i32):
+    v2 = isub v0, v1
+    return v2
+}
+; run: %sub_i32(0, 0) == 0
+; run: %sub_i32(0, 1) == -1
+; run: %sub_i32(1, 0) == 1
+; run: %sub_i32(-1, 0) == -1
+; run: %sub_i32(-1, 1) == -2
+; run: %sub_i32(0x80000000, 0x7FFFFFFF) == 1
+; run: %sub_i32(0xFFFFFFFF, 0xFEDCBA98) == 0x01234567
+; run: %sub_i32(0xABBABBAB, 0x0BB0BB0B) == 0xA00A00A0
+; run: %sub_i32(0xC0FFEEEE, 0xDECAFFFF) == 0xE234EEEF
+
+function %sub_i16(i16, i16) -> i16 {
+block0(v0: i16,v1: i16):
+    v2 = isub v0, v1
+    return v2
+}
+; run: %sub_i16(0, 0) == 0
+; run: %sub_i16(0, 1) == -1
+; run: %sub_i16(1, 0) == 1
+; run: %sub_i16(-1, 0) == -1
+; run: %sub_i16(-1, 1) == -2
+; run: %sub_i16(0x8000, 0x7FFF) == 1
+; run: %sub_i16(0xFFFF, 0xFEDC) == 0x0123
+; run: %sub_i16(0xABBA, 0x0BB0) == 0xA00A
+; run: %sub_i16(0xC0FF, 0xDECA) == 0xE235
+
+function %sub_i8(i8, i8) -> i8 {
+block0(v0: i8,v1: i8):
+    v2 = isub v0, v1
+    return v2
+}
+; run: %sub_i8(0, 0) == 0
+; run: %sub_i8(0, 1) == -1
+; run: %sub_i8(1, 0) == 1
+; run: %sub_i8(-1, 0) == -1
+; run: %sub_i8(-1, 1) == -2
+; run: %sub_i8(0x80, 0x7F) == 1
+; run: %sub_i8(0xFF, 0xFE) == 0x01
+; run: %sub_i8(0xAB, 0x0B) == 0xA0
+; run: %sub_i8(0xC0, 0xDE) == 0xE2
+
+function %isub_const_lhs(i8, i32) -> i32 {
+block0(v0: i8, v1: i32):
+    v376 = iconst.i32 0xffff_fffd
+    v1161 = isub v376, v1
+    return v1161
+}
+; run: %isub_const_lhs(68, 4474) == -4477

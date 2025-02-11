@@ -203,6 +203,28 @@ impl X86Isa {
                             );
                             buffer.append(&mut xinst.serialize()?);
                         }
+                        ir::Opcode::Isub => {
+                            let width: Width = typevar_operand
+                                .as_ref()
+                                .map(|z| type_of(z))
+                                .with_context(|| format!("could not determine width"))?
+                                .into();
+
+                            // x86 add overwrites the first operand, so for now:
+                            //    Move operand one into destination.
+                            //    Add operand two to destination.
+                            let dest = Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap()));
+                            let xinst = cg::Instruction::op(
+                                Op::Mov(width),
+                                &[dest, Operand::Reg(rg2x(use_allocs[0].as_reg().unwrap()))],
+                            );
+                            buffer.append(&mut xinst.serialize()?);
+                            let xinst = cg::Instruction::op(
+                                Op::Sub(width),
+                                &[dest, Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap()))],
+                            );
+                            buffer.append(&mut xinst.serialize()?);
+                        }
                         _ => todo!(
                             "unimplemented opcode: {:?} in {:?}, of {:?}",
                             opcode,
