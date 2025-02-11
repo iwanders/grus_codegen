@@ -97,9 +97,9 @@ impl X86Isa {
                       // Reg::EDI, // PReg(4),
         ];
         let rg2x = |p: regalloc2::PReg| regmap[p.index() as usize];
-        let scratch = Reg::EBX;
+        // let scratch = Reg::EBX;
 
-        let regs = grus_regalloc::run_ir(&func, &grus_regalloc::simple_int_machine(4, 4))?;
+        let regs = grus_regalloc::run_ir(&func, &grus_regalloc::simple_int_machine(4, 0))?;
         debug!(" regs: {regs:#?}");
 
         for b in layout.blocks() {
@@ -188,61 +188,20 @@ impl X86Isa {
                                 .with_context(|| format!("could not determine width"))?
                                 .into();
 
-                            // x86 add overwrites the first operand...
-                            // let move_add_move = true;
-                            let move_add_move = false;
-                            if move_add_move {
-                                //   Move the first operand into scratch.
-                                //   Add second operand to scratch.
-                                //   Move scratch to destination.
-                                let xinst = cg::Instruction::op(
-                                    Op::Mov(width),
-                                    &[
-                                        Operand::Reg(scratch),
-                                        Operand::Reg(rg2x(use_allocs[0].as_reg().unwrap())),
-                                    ],
-                                );
-                                buffer.append(&mut xinst.serialize()?);
-                                let xinst = cg::Instruction::op(
-                                    Op::Add(width),
-                                    &[
-                                        Operand::Reg(scratch),
-                                        Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap())),
-                                    ],
-                                );
-                                buffer.append(&mut xinst.serialize()?);
-                                // Now scratch holds the desired outcome.
-                                let xinst = cg::Instruction::op(
-                                    Op::Mov(width),
-                                    &[
-                                        Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap())),
-                                        Operand::Reg(scratch),
-                                    ],
-                                );
-                                buffer.append(&mut xinst.serialize()?);
-                            } else {
-                                // Move operand one into destination.
-                                // Move add operand two to destination.
-                                let dest = Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap()));
-                                let xinst = cg::Instruction::op(
-                                    Op::Mov(width),
-                                    &[dest, Operand::Reg(rg2x(use_allocs[0].as_reg().unwrap()))],
-                                );
-                                buffer.append(&mut xinst.serialize()?);
-                                let xinst = cg::Instruction::op(
-                                    Op::Add(width),
-                                    &[dest, Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap()))],
-                                );
-                                buffer.append(&mut xinst.serialize()?);
-                            }
-
-                            // That leaves the result in EDI, so move it to EAX to be ready for the return.
-                            // buffer.append(&mut xinst.serialize()?);
-                            // let xinst = cg::Instruction::op(
-                            // Op::Mov(Width::W64),
-                            // &[Operand::Reg(Reg::EAX), Operand::Reg(Reg::EDI)],
-                            // );
-                            // buffer.append(&mut xinst.serialize()?);
+                            // x86 add overwrites the first operand, so for now:
+                            //    Move operand one into destination.
+                            //    Add operand two to destination.
+                            let dest = Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap()));
+                            let xinst = cg::Instruction::op(
+                                Op::Mov(width),
+                                &[dest, Operand::Reg(rg2x(use_allocs[0].as_reg().unwrap()))],
+                            );
+                            buffer.append(&mut xinst.serialize()?);
+                            let xinst = cg::Instruction::op(
+                                Op::Add(width),
+                                &[dest, Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap()))],
+                            );
+                            buffer.append(&mut xinst.serialize()?);
                         }
                         _ => todo!(
                             "unimplemented opcode: {:?} in {:?}, of {:?}",
@@ -266,12 +225,6 @@ impl X86Isa {
         }
         warn!("buffer: echo {s}");
 
-        // const NOP: u8 = 0x90;
-        // const RETN: u8 = 0xc3;
-        // const INT3: u8 = 0xcc;
-        // let buffer = vec![0xB8, 0x46, 0x00, 0x00, 0x00, NOP, NOP, INT3, RETN];
-        // 0xB8, 0x46, 0x00, 0x00, 0x00 is writing 0x46 to EAX
-        // let buffer = vec![0xB8, 0x46, 0x00, 0x00, 0x00, NOP, NOP, RETN];
         Ok(CompiledCode {
             buffer,
             // Size of stack frame, in bytes.

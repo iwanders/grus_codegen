@@ -242,7 +242,7 @@ impl RegFunction for IrFunction {
     fn inst_operands(&self, reginst: regalloc2::Inst) -> &[regalloc2::Operand] {
         &self.inst_info[&reginst].operands
     }
-    fn inst_clobbers(&self, inst: regalloc2::Inst) -> PRegSet {
+    fn inst_clobbers(&self, _inst: regalloc2::Inst) -> PRegSet {
         // PRegSet::default()
         todo!()
     }
