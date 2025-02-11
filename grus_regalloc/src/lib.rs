@@ -405,4 +405,6 @@ pub fn run_ir(func: &ir::Function, env: &MachineEnv) -> Result<RegOutput, RegAll
     let regfun = wrapper::IrFunction::new(func);
     println!("regfun: {regfun:#?}");
     run(&regfun, env)
+    // let options = regalloc2::RegallocOptions::default();
+    // regalloc2::run(&regfun, env, &options)
 }

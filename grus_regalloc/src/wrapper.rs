@@ -25,6 +25,7 @@ pub struct IrFunction {
     block_insn: HashMap<RegBlock, InstRange>,
     block_params: HashMap<RegBlock, Vec<VReg>>,
     block_succs: HashMap<RegBlock, Vec<RegBlock>>,
+    block_preds: HashMap<RegBlock, Vec<RegBlock>>,
     inst_info: HashMap<RegInst, InstInfo>,
 }
 
@@ -44,6 +45,9 @@ impl IrFunction {
         let mut block_insn: HashMap<RegBlock, InstRange> = Default::default();
         let mut block_params: HashMap<RegBlock, Vec<VReg>> = Default::default();
         let mut block_succs: HashMap<RegBlock, Vec<RegBlock>> = Default::default();
+        let mut block_preds: HashMap<RegBlock, Vec<RegBlock>> = Default::default();
+
+        let cfg = cranelift_codegen::flowgraph::ControlFlowGraph::with_function(fun);
 
         for cbl in fun.layout.blocks() {
             // let cbl = IrBlock::from_u32(block.raw_u32());
@@ -83,9 +87,20 @@ impl IrFunction {
 
             block_succs.insert(
                 regblock,
-                fun.stencil
-                    .block_successors(cbl)
-                    .map(|v| RegBlock::new(v.as_u32() as usize))
+                cfg.succ_iter(cbl)
+                    .map(|v| {
+                        // let block = fun.layout.inst_block(&v.block).expect("instruction doesn't have block");
+                        RegBlock::new(v.as_u32() as usize)
+                    })
+                    .collect(),
+            );
+            block_preds.insert(
+                regblock,
+                cfg.pred_iter(cbl)
+                    .map(|v| {
+                        // let block = fun.layout.inst_block(&v.block).expect("instruction doesn't have block");
+                        RegBlock::new(v.block.as_u32() as usize)
+                    })
                     .collect(),
             );
         }
@@ -187,6 +202,7 @@ impl IrFunction {
             block_insn,
             block_params,
             block_succs,
+            block_preds,
             inst_info,
         }
     }
@@ -208,8 +224,8 @@ impl RegFunction for IrFunction {
     fn block_succs(&self, block: regalloc2::Block) -> &[regalloc2::Block] {
         &self.block_succs[&block]
     }
-    fn block_preds(&self, _: regalloc2::Block) -> &[regalloc2::Block] {
-        todo!()
+    fn block_preds(&self, block: regalloc2::Block) -> &[regalloc2::Block] {
+        &self.block_preds[&block]
     }
     fn block_params(&self, block: regalloc2::Block) -> &[VReg] {
         &self.block_params[&block]
@@ -226,7 +242,8 @@ impl RegFunction for IrFunction {
     fn inst_operands(&self, reginst: regalloc2::Inst) -> &[regalloc2::Operand] {
         &self.inst_info[&reginst].operands
     }
-    fn inst_clobbers(&self, _: regalloc2::Inst) -> PRegSet {
+    fn inst_clobbers(&self, inst: regalloc2::Inst) -> PRegSet {
+        // PRegSet::default()
         todo!()
     }
     fn num_vregs(&self) -> usize {
