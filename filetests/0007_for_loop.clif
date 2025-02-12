@@ -1,0 +1,33 @@
+test run
+test compile
+target x86_64
+
+function %loop(i64, i64) -> i64 system_v {
+
+block1(v0: i64, v1: i64):
+    v3 = iconst.i64 0
+    brif v1, block2, block5(v3)
+
+block2:
+    v4 = iconst.i64 0
+    v5 = iconst.i64 0
+    jump block3(v4, v5)
+
+block3(v9: i64, v6: i64):
+    v11 = iadd_imm v6, 1
+    v13 = iadd v9, v0
+    v12 = icmp ult v11, v1
+    brif v12, block3(v13, v11), block5(v13)
+
+block5(v100: i64):
+    return v100
+}
+
+; run: %loop(0, 0) == 0
+; run: %loop(5, 5) == 25
+; run: %loop(1, 0) == 0
+; run: %loop(1, 0) == 0
+; run: %loop(1, 1) == 1
+; run: %loop(7, 1) == 7
+; run: %loop(7, 2) == 14
+; run: %loop(7, 100) == 700
