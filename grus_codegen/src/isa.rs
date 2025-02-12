@@ -89,7 +89,7 @@ impl X86Isa {
 
         // And regalloc uses 'n' registers from 0..n.
         // So we need to map those to something.
-        let limit_regs_4 = true;
+        // let limit_regs_4 = true;
         let regmap = [
             Reg::EDI, // PReg(0),
             Reg::ESI, // PReg(1),
