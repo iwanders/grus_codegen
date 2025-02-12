@@ -20,6 +20,11 @@ impl X86Isa {
         }
     }
 }
+impl Default for X86Isa {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[derive(Debug)]
 pub struct CompiledCode {
@@ -99,10 +104,10 @@ impl X86Isa {
                       // Reg::R9,  // PReg(5),
                       // Reg::R10, Reg::R11, Reg::R12, Reg::R13, Reg::R14, Reg::R15
         ];
-        let rg2x = |p: regalloc2::PReg| regmap[p.index() as usize];
+        let rg2x = |p: regalloc2::PReg| regmap[p.index()];
         // let scratch = Reg::EBX;
 
-        let regs = grus_regalloc::run_ir(&func, &grus_regalloc::simple_int_machine(4, 0))?;
+        let regs = grus_regalloc::run_ir(func, &grus_regalloc::simple_int_machine(4, 0))?;
         debug!(" regs: {regs:#?}");
 
         for b in layout.blocks() {
@@ -121,7 +126,7 @@ impl X86Isa {
                 let type_of = |v: &ir::Value| dfg.value_type(*v);
                 let types_of =
                     |v: &[ir::Value]| v.iter().map(|z| dfg.value_type(*z)).collect::<Vec<_>>();
-                debug!("  args: {:?} types: {:?}", arguments, types_of(&arguments));
+                debug!("  args: {:?} types: {:?}", arguments, types_of(arguments));
 
                 let allocs_args = regs.inst_allocs(RegInst::new(inst.as_u32() as usize));
                 debug!("  allocs: {allocs_args:?}");
@@ -134,13 +139,13 @@ impl X86Isa {
                     "  results? {:?} -> {:?}  (types: {:?}) ",
                     dfg.has_results(inst),
                     dfg.inst_results(inst),
-                    types_of(&dfg.inst_results(inst))
+                    types_of(dfg.inst_results(inst))
                 );
                 let typevar_operand = instdata.typevar_operand(&dfg.value_lists);
                 debug!(
                     "  typevar_operand: {:?}, type: {:?}",
                     typevar_operand,
-                    typevar_operand.as_ref().map(|z| type_of(z))
+                    typevar_operand.as_ref().map(type_of)
                 );
                 debug!("  opcode: {:?}", instdata.opcode());
 
@@ -187,8 +192,8 @@ impl X86Isa {
                         ir::Opcode::Iadd => {
                             let width: Width = typevar_operand
                                 .as_ref()
-                                .map(|z| type_of(z))
-                                .with_context(|| format!("could not determine width"))?
+                                .map(type_of)
+                                .with_context(|| "could not determine width")?
                                 .into();
 
                             // x86 add overwrites the first operand, so for now:
@@ -209,8 +214,8 @@ impl X86Isa {
                         ir::Opcode::Isub => {
                             let width: Width = typevar_operand
                                 .as_ref()
-                                .map(|z| type_of(z))
-                                .with_context(|| format!("could not determine width"))?
+                                .map(type_of)
+                                .with_context(|| "could not determine width")?
                                 .into();
 
                             // x86 add overwrites the first operand, so for now:
@@ -231,8 +236,8 @@ impl X86Isa {
                         ir::Opcode::Imul => {
                             let width: Width = typevar_operand
                                 .as_ref()
-                                .map(|z| type_of(z))
-                                .with_context(|| format!("could not determine width"))?
+                                .map(type_of)
+                                .with_context(|| "could not determine width")?
                                 .into();
 
                             // x86 integer mul supports three forms, we use the two-operand

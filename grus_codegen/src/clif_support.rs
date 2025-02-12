@@ -1,3 +1,4 @@
+#![allow(clippy::needless_range_loop)]
 // use cranelift_reader::parse_functions;
 
 /*
@@ -23,19 +24,20 @@ pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
     let mut module = ObjectModule::new();
     let mut funids = vec![];
     for (fun, _detail) in test_file.functions.iter() {
-        let res = isa.compile_function(&fun)?;
-        let id = module.declare_named_function(Linkage::Export, &fun)?;
+        let res = isa.compile_function(fun)?;
+        let id = module.declare_named_function(Linkage::Export, fun)?;
         module.define_function_bytes(id, 0, &res.buffer)?;
         funids.push(id);
     }
     let jit_module = module.jit()?;
     jit_module.write("/tmp/foo.o")?;
 
-    let mut fun_trampolines: Vec<Box<dyn Fn(&Vec<DataValue>) -> u64>> = vec![];
+    type TrampolineSignature = dyn Fn(&Vec<DataValue>) -> u64;
+    let mut fun_trampolines: Vec<Box<TrampolineSignature>> = vec![];
     for (i, (_fun, _detail)) in test_file.functions.iter().enumerate() {
         let p = jit_module
             .get_fun(&funids[i])
-            .context(format!("could not find function"))?;
+            .context("could not find function")?;
         // println!("p: {p:?}");
 
         // unsafe {
@@ -143,17 +145,17 @@ pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
     if count_failures != 0 {
         warn!("Failures: {count_failures}");
         info!("Success: {count_success}");
-        return Ok(false);
+        Ok(false)
     } else {
         info!("Success: {count_success}");
-        return Ok(true);
+        Ok(true)
     }
 }
 
 pub fn test_files<P: AsRef<std::path::Path> + std::fmt::Debug>(files: &[P]) -> Result<bool> {
     let mut all_passed = true;
     for f in files {
-        let f = std::fs::read_to_string(&f).context(format!("failed to open {f:?}"))?;
+        let f = std::fs::read_to_string(f).context(format!("failed to open {f:?}"))?;
         let test_file = cranelift_reader::parse_test(&f, Default::default())?;
         all_passed &= process_test_file(&test_file)?;
     }
@@ -183,7 +185,7 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
     fun_index: usize,
     regmachine: RegisterMachine,
 ) -> Result<()> {
-    let f = std::fs::read_to_string(&file).context(format!("failed to open {file:?}"))?;
+    let f = std::fs::read_to_string(file).context(format!("failed to open {file:?}"))?;
     let test_file = cranelift_reader::parse_test(&f, Default::default())?;
     // all_passed &= process_test_file(&test_file)?;
 
@@ -193,7 +195,7 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
         .context(format!("fun index {fun_index} out of bounds"))?;
     let function = &function.0;
 
-    let res = grus_regalloc::run_ir(&function, &regmachine.to_env())?;
+    let res = grus_regalloc::run_ir(function, &regmachine.to_env())?;
     println!("res: {res:#?}");
 
     Ok(())

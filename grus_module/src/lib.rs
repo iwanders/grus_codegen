@@ -76,6 +76,13 @@ pub struct ObjectModule {
     functions: std::collections::HashMap<FuncId, Option<(SymbolId, bool)>>,
     declarations: ModuleDeclarations,
 }
+
+impl Default for ObjectModule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ObjectModule {
     pub fn new() -> Self {
         let binary_format = object::BinaryFormat::Elf;
@@ -140,8 +147,7 @@ impl ObjectModule {
         let &mut (symbol, ref mut defined) = self
             .functions
             .get_mut(&func_id)
-            .map(|z| z.as_mut())
-            .flatten()
+            .and_then(|z| z.as_mut())
             .unwrap();
         if *defined {
             return Err(ModuleError::DuplicateDefinition(decl_name.into_owned()));

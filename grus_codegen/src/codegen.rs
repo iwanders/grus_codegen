@@ -125,7 +125,7 @@ impl From<cranelift_codegen::ir::types::Type> for Width {
             val if val == 64 / 8 => Width::W64,
             val if val == 32 / 8 => Width::W32,
             val if val == 16 / 8 => Width::W16,
-            val if val == 8 / 8 => Width::W8,
+            1 => Width::W8,
             _ => panic!("unhandled width: {}", v.bytes()),
         }
     }
@@ -147,7 +147,7 @@ impl Instruction {
     pub fn op(op: Op, operands: &[Operand]) -> Self {
         Self {
             op,
-            operands: operands.iter().map(|z| *z).collect(),
+            operands: operands.iter().copied().collect(),
         }
     }
 
@@ -174,7 +174,7 @@ impl Instruction {
     fn addr_reg(r: Reg, opcode: &[u8], width: Width) -> Result<(Rex, OpcodeVec), CodegenError> {
         let mut rex: u8 = 0b0100 << 4;
         if r.index() > 0b1111 {
-            return Err(CodegenError::InvalidRegister { reg: r }.into());
+            return Err(CodegenError::InvalidRegister { reg: r });
         }
         let top = (r.index() & 0b1111) >> 3;
         rex |= top;
@@ -211,8 +211,7 @@ impl Instruction {
             return Err(CodegenError::InvalidOperandCount {
                 got: self.operands.len(),
                 expected,
-            }
-            .into());
+            });
         }
 
         match self.op {

@@ -172,7 +172,7 @@ impl IrFunction {
                 .get_mut(&reg_inst)
                 .expect("no info for first instruction");
             let ir_entry_block = fun.layout.entry_block().expect("should have entry block");
-            for (i, v) in fun.dfg.block_params(ir_entry_block).into_iter().enumerate() {
+            for (i, v) in fun.dfg.block_params(ir_entry_block).iter().enumerate() {
                 let valuetype = fun.dfg.value_type(*v);
                 let regtype = if valuetype.is_int() {
                     RegClass::Int
@@ -180,7 +180,7 @@ impl IrFunction {
                     RegClass::Float
                 };
                 let vreg = VReg::new(v.as_u32() as usize, regtype);
-                let preg = regalloc2::PReg::new(i as usize, regtype);
+                let preg = regalloc2::PReg::new(i, regtype);
 
                 println!("Note to self, hardcoded call convention; {vreg:?} -> {preg:?}");
                 let operand = RegOperand::new(

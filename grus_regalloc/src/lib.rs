@@ -1,3 +1,4 @@
+#![allow(clippy::needless_range_loop)]
 use cranelift_codegen::ir;
 use regalloc2::Function as RegFunction;
 use regalloc2::Output as RegOutput;
@@ -167,8 +168,8 @@ impl Machine {
         for (group, order) in reg_groups {
             // for try_preg in self.
             for preg in order[class_index].iter() {
-                if group[class_index][&preg].is_none() {
-                    *group[class_index].get_mut(&preg).unwrap() = Some(op.vreg());
+                if group[class_index][preg].is_none() {
+                    *group[class_index].get_mut(preg).unwrap() = Some(op.vreg());
                     return Ok(Allocation::reg(*preg));
                 }
             }
@@ -207,7 +208,7 @@ mod winged {
             for i in 0..3 {
                 for v in self.preferred_regs_by_class[i].values_mut() {
                     if let Some(vreg) = v {
-                        let state = &varmap[&vreg];
+                        let state = &varmap[vreg];
                         if state.duration.end().0 <= current_instruction.0 {
                             println!("evicted {vreg:?}");
                             *v = None;
@@ -279,9 +280,9 @@ mod winged {
                         );
                     } else if op.kind() == OperandKind::Use {
                         // it is used, so it MUST be present in the map.
-                        let entry = varmap.get_mut(&op.vreg()).expect(&format!(
-                            "encountered vreg {op:?} never seen before at {insn:?}"
-                        ));
+                        let entry = varmap.get_mut(&op.vreg()).unwrap_or_else(|| {
+                            panic!("encountered vreg {op:?} never seen before at {insn:?}")
+                        });
                         entry.duration = *entry.duration.start()..=insn;
                         entry.reads.push(insn);
                     }
@@ -317,7 +318,9 @@ mod winged {
                             todo!("got a def on {preg:?} but that is occupied")
                         }
                     }
-                    _ => {}
+                    _ => {
+                        todo!()
+                    }
                 }
             }
         }
