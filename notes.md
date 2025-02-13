@@ -18,3 +18,35 @@
 - Add stack frame setup for functions?
 - [x] Multiplication of integers.
 
+
+## Useful commands
+
+### Compile to wasm.
+Compile `z.rs` to wasm32;
+```
+rustc z.rs  --edition 2021 --crate-type  cdylib --target wasm32-unknown-unknown
+```
+
+### Wasmtime ir
+
+With
+```wast
+(module
+  (func (export "diverging_converging") (param i32 i32) (result i32)
+    (if (result i32) (local.get 0)
+      (then
+        local.get 1
+      )
+      (else
+        local.get 0
+      )
+    )
+    i32.const 1
+    i32.add
+  )
+)
+```
+
+```
+wasmtime$ cargo r --release -- explore  <file_to_wasm/wast>
+```

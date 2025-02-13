@@ -201,7 +201,6 @@ mod winged {
 
         #[no_mangle]
         extern "C" fn foo(v0: u64, v1: u64) -> u64 {
-
             let r = if v0 == 0{
                 &v0
             } else {
@@ -228,6 +227,46 @@ mod winged {
          mov QWORD PTR [rsp-0x30],rax
          mov rax,QWORD PTR [rsp-0x30]
          ret
+
+        with
+            (module
+              (func (export "diverging_converging") (param i32 i32) (result i32)
+                (if (result i32) (local.get 0)
+                  (then
+                    local.get 1
+                  )
+                  (else
+                    local.get 0
+                  )
+                )
+                i32.const 1
+                i32.add
+              )
+            )
+
+        the ir becomes:
+
+        function u0:0(i64 vmctx, i64, i32, i32) -> i32 tail {
+            gv0 = vmctx
+            gv1 = load.i64 notrap aligned readonly gv0+8
+            gv2 = load.i64 notrap aligned gv1+16
+            stack_limit = gv2
+            block0(v0: i64, v1: i64, v2: i32, v3: i32):
+                brif v2, block2, block4
+            block2:
+                jump block3(v3)
+            block4:
+                jump block3(v2)
+            block3(v5: i32):
+                jump block1
+            block1:
+                v6 = iconst.i32 1
+                v7 = iadd.i32 v5, v6  ; v6 = 1
+                return v7
+        }
+
+        So two intermediate blocks are created for the jump to the last block.
+
     */
     use super::*;
 
