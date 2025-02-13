@@ -187,6 +187,47 @@ mod winged {
         Determine 'hotness' of variables based on whether they are used in the vicinity.
             Keep hot variable in the registers.
         If we run out of registers, the least hot variable goes onto the stack.
+
+        For if statements, we get diverging codepaths, that may - or may not - converge.
+        What if we always put the input variables to a block on the stack, does that resolve
+        the constraints between departure location and and block landing location registers?
+        Each block could have its own stack slot?
+
+        The situation
+            brif v0, block5(v1), block5(v2)
+        is still problematic then...
+
+        https://godbolt.org/z/TEo1acP87
+
+        #[no_mangle]
+        extern "C" fn foo(v0: u64, v1: u64) -> u64 {
+
+            let r = if v0 == 0{
+                &v0
+            } else {
+                &v1
+            };
+            (*r).wrapping_add(3)
+        }
+
+        foo:
+         mov QWORD PTR [rsp-0x28],rdi
+         mov QWORD PTR [rsp-0x20],rsi
+         cmp QWORD PTR [rsp-0x28],0x0
+         jne 1e <foo+0x1e> ----------------+      Diverge point.
+         lea rax,[rsp-0x28]                |
+         mov QWORD PTR [rsp-0x18],rax      |      <-
+         jmp 28 <foo+0x28>   -------------/.\--+    \ Both move rax into rsp-0x18
+         lea rax,[rsp-0x20]  <-------------+   |    /
+         mov QWORD PTR [rsp-0x18],rax          |  <-
+         mov rax,QWORD PTR [rsp-0x18] <--------+  Converge point.
+         mov rax,QWORD PTR [rax]
+         mov QWORD PTR [rsp-0x10],rax
+         mov QWORD PTR [rsp-0x8],0x3
+         add rax,0x3
+         mov QWORD PTR [rsp-0x30],rax
+         mov rax,QWORD PTR [rsp-0x30]
+         ret
     */
     use super::*;
 

@@ -1,0 +1,19 @@
+test run
+test compile
+target x86_64
+
+function %branch_diverge(i64, i64) -> i64 system_v {
+
+block1(v0: i64, v1: i64):
+    brif v0, block2(v0), block2(v1)
+
+block2(v4: i64):
+    v11 = iadd_imm v4, 1
+    return v11
+
+}
+
+; run: %branch_diverge(0, 0) == 1
+; run: %branch_diverge(0, 5) == 6
+; run: %branch_diverge(1, 0) == 2
+; run: %branch_diverge(3, 0) == 4
