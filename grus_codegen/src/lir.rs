@@ -1,8 +1,10 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
 use cranelift_codegen::ir::Function as CraneliftIrFunction;
 use cranelift_codegen::ir::Inst as IrInst;
 use cranelift_codegen::ir::Value;
 /**
-    A low level intermediate representation.
+    A low(er) level intermediate representation.
 */
 /*
 
@@ -29,6 +31,23 @@ use cranelift_codegen::ir::Value;
     calling convention, since the cranelift IR is all on Values. It would be nice to be able to
     reuse that though.
 
+
+    What if we do:
+        LirSection:
+            - Vec<HwInstruction>
+            - Vec<IrInstruction>
+
+        That way we can gradually convert ir instructions into hw instructions?
+        And we can do something whereh hw instructions aren't fully specified yet, potentially
+        with partial register specifications and populate the remainder?
+
+        A block can then be made up of multiple sections.
+        The trivial translation is lirsections where the ir instructions is one long.
+        This is necessary for example where an ir instruction lowers into multiple hardware
+        instructions.
+
+        And we can track which ir instructions resulted in which hw instructions, while still being
+        able to create sections that contain just hw instructions, like with the calling convention?
 */
 use cranelift_codegen::isa::CallConv;
 
@@ -54,6 +73,18 @@ impl BlockId {
 struct Inst(usize);
 use Inst as LirInst;
 
+#[derive(Copy, Clone, Debug)]
+enum LirOperand {
+    Virtual(Value),
+    Machine(crate::codegen::Operand),
+}
+
+#[derive(Clone, Debug)]
+struct InstructionData {
+    operation: crate::codegen::Op,
+    operands: Vec<LirOperand>,
+}
+
 #[derive(Clone, Debug)]
 struct Section {
     lir_inst: Vec<LirInst>,
@@ -62,11 +93,7 @@ struct Section {
 
 #[derive(Clone, Debug)]
 struct Block {
-    insts: Vec<Section>,
-
-    inputs: Vec<Value>,
-    outputs: Vec<Value>,
-    use_values: Vec<Value>,
+    sections: Vec<Section>,
 }
 
 pub struct Function {

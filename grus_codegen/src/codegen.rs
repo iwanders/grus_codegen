@@ -45,6 +45,11 @@ impl Op {
     }
 }
 
+/*
+Todo, change registers to u64
+    Then we can express each register as a single bit
+    And easily specify which registers may (or may not) be used by a particular instruction.
+*/
 #[derive(Debug, Copy, Clone)]
 pub struct Reg(u8);
 impl Reg {
