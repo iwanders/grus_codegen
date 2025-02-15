@@ -1,6 +1,6 @@
 use cranelift_codegen::ir::Function as CraneliftIrFunction;
 use cranelift_codegen::ir::Inst as IrInst;
-use cranelift_codegen::ir::{InstructionData, Value};
+use cranelift_codegen::ir::Value;
 /**
     A low level intermediate representation.
 */
@@ -13,6 +13,22 @@ use cranelift_codegen::ir::{InstructionData, Value};
     Want to be able to put the calling convention here.
 
     Handle offsets and jumps for branches and loops.
+
+    Ideall, we can handle;
+        Some instructions still IrInst, with values.
+            - Only know registers after we've performed the register allocation.
+        Some instructions have (partial) limitations on registers
+            - Some instructions have hardware constraints.
+            - Calling convention.
+            - If a single Ir Instruction becomes a bunch of instructions.
+
+    Should we instead use cranelift IR opcodes to express?
+    Basically going from cranelift IR to cranelift IR?
+
+    That doesn't work though for sections that MUST have specific registers... like with the
+    calling convention, since the cranelift IR is all on Values. It would be nice to be able to
+    reuse that though.
+
 */
 use cranelift_codegen::isa::CallConv;
 
