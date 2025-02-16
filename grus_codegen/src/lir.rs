@@ -2,6 +2,7 @@
 #![allow(unused_imports)]
 use cranelift_codegen::ir::Function as CraneliftIrFunction;
 use cranelift_codegen::ir::Inst as IrInst;
+use cranelift_codegen::ir::InstructionData as IrInstructionData;
 use cranelift_codegen::ir::{self, Value};
 /**
     A low(er) level intermediate representation.
@@ -78,26 +79,60 @@ impl BlockId {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-struct Inst(usize);
-use Inst as LirInst;
+// #[derive(Copy, Clone, Debug)]
+// struct Inst(usize);
+// use Inst as LirInst;
 
 #[derive(Copy, Clone, Debug)]
 enum LirOperand {
     Virtual(Value),
     Machine(crate::codegen::Operand),
 }
+impl From<Value> for LirOperand {
+    fn from(v: Value) -> LirOperand {
+        LirOperand::Virtual(v)
+    }
+}
+impl From<crate::codegen::Operand> for LirOperand {
+    fn from(v: crate::codegen::Operand) -> LirOperand {
+        LirOperand::Machine(v)
+    }
+}
 
 #[derive(Clone, Debug)]
 struct InstructionData {
     operation: crate::codegen::Op,
     // Should we have def_operand and use_operand?
-    operands: Vec<LirOperand>,
+    def_operands: Vec<LirOperand>,
+    use_operands: Vec<LirOperand>,
+}
+impl InstructionData {
+    pub fn new(operation: crate::codegen::Op) -> Self {
+        Self {
+            operation,
+            def_operands: vec![],
+            use_operands: vec![],
+        }
+    }
+    pub fn with_use<T: Into<LirOperand> + Copy>(self, ops: &[T]) -> Self {
+        Self {
+            operation: self.operation,
+            def_operands: self.def_operands,
+            use_operands: ops.into_iter().map(|z| (*z).into()).collect(),
+        }
+    }
+    pub fn with_def<T: Into<LirOperand> + Copy>(self, ops: &[T]) -> Self {
+        Self {
+            operation: self.operation,
+            def_operands: ops.into_iter().map(|z| (*z).into()).collect(),
+            use_operands: self.use_operands,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
 struct Section {
-    lir_inst: Vec<LirInst>,
+    lir_inst: Vec<InstructionData>,
     ir_inst: Vec<IrInst>,
 }
 impl Section {
@@ -126,6 +161,7 @@ impl Block {
     }
 }
 
+#[derive(Debug)]
 pub struct Function {
     blocks: Vec<Block>,
     entry_block: Option<BlockId>,
@@ -200,21 +236,142 @@ impl Function {
         self.entry_block = Some(entryblockid);
     }
 
-    /// Lower IR instructions to machine instructions
+    /// Lower IR instructions to partial machine instructions
     pub fn lower(&mut self) {
+        let new_op = InstructionData::new;
+        use crate::codegen::{Op, Operand, Width};
+        let dfg = &self.fun.dfg;
+        let type_of = |v: &ir::Value| dfg.value_type(*v);
+        let _types_of = |v: &[ir::Value]| v.iter().map(|z| dfg.value_type(*z)).collect::<Vec<_>>();
+
         for b in self.blocks.iter_mut() {
             for s in b.sections.iter_mut() {
+                let lirs = &mut s.lir_inst;
                 for inst in s.ir_inst.iter() {
-                    let _instdata = self.fun.dfg.insts[*inst];
-                    todo!();
+                    let instdata = self.fun.dfg.insts[*inst];
+                    let def_ir = self.fun.dfg.inst_results(*inst);
+                    let use_ir = instdata.arguments(&self.fun.dfg.value_lists);
+                    let typevar_operand = instdata.typevar_operand(&dfg.value_lists);
+                    match instdata {
+                        IrInstructionData::UnaryImm { opcode, imm } => match opcode {
+                            ir::Opcode::Iconst => {
+                                lirs.push(
+                                    new_op(Op::Mov(Width::W64))
+                                        .with_use(&[Operand::Immediate(imm.bits())])
+                                        .with_def(&[def_ir[0]]),
+                                );
+                            }
+                            _ => todo!(
+                                "unimplemented opcode: {:?} in {:?}, of {:?}",
+                                opcode,
+                                inst,
+                                self.fun.name
+                            ),
+                        },
+                        IrInstructionData::MultiAry { opcode, args } => match opcode {
+                            ir::Opcode::Return => {
+                                if args.len(&self.fun.dfg.value_lists) != 1 {
+                                    todo!()
+                                }
+                                lirs.push(
+                                    new_op(Op::Mov(Width::W64))
+                                        .with_use(&[use_ir[0]])
+                                        .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
+                                );
+                                lirs.push(new_op(Op::Return));
+                            }
+                            _ => todo!(
+                                "unimplemented opcode: {:?} in {:?}, of {:?}",
+                                opcode,
+                                inst,
+                                self.fun.name
+                            ),
+                        },
 
-                    // match instdata {
-                    // InstructionData::UnaryImm { opcode, imm } => {
-                    // }
-                    // }
+                        IrInstructionData::Binary { opcode, args: _ } => match opcode {
+                            ir::Opcode::Iadd => {
+                                let width: Width = typevar_operand
+                                    .as_ref()
+                                    .map(type_of)
+                                    .map(|z| z.into())
+                                    .unwrap_or(Width::W64);
+
+                                // x86 add overwrites the first operand, so for now:
+                                //    Move operand one into destination.
+                                //    Add operand two to destination.
+                                lirs.push(
+                                    new_op(Op::Mov(width))
+                                        .with_use(&[use_ir[0]])
+                                        .with_def(&[def_ir[0]]),
+                                );
+                                lirs.push(
+                                    new_op(Op::IAdd(width))
+                                        .with_use(&[def_ir[0], use_ir[1]])
+                                        .with_def(&[def_ir[0]]),
+                                );
+                            }
+                            /*
+                            ir::Opcode::Isub => {
+                                let width: Width = typevar_operand
+                                    .as_ref()
+                                    .map(type_of)
+                                    .with_context(|| "could not determine width")?
+                                    .into();
+
+                                // x86 add overwrites the first operand, so for now:
+                                //    Move operand one into destination.
+                                //    Add operand two to destination.
+                                let dest = Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap()));
+                                let xinst = cg::Instruction::op(
+                                    Op::Mov(width),
+                                    &[dest, Operand::Reg(rg2x(use_allocs[0].as_reg().unwrap()))],
+                                );
+                                buffer.append(&mut xinst.serialize()?);
+                                let xinst = cg::Instruction::op(
+                                    Op::ISub(width),
+                                    &[dest, Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap()))],
+                                );
+                                buffer.append(&mut xinst.serialize()?);
+                            }
+                            ir::Opcode::Imul => {
+                                let width: Width = typevar_operand
+                                    .as_ref()
+                                    .map(type_of)
+                                    .with_context(|| "could not determine width")?
+                                    .into();
+
+                                // x86 integer mul supports three forms, we use the two-operand
+                                // version here, this multiplies into the destination.
+                                let dest = Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap()));
+                                let xinst = cg::Instruction::op(
+                                    Op::Mov(width),
+                                    &[dest, Operand::Reg(rg2x(use_allocs[0].as_reg().unwrap()))],
+                                );
+                                buffer.append(&mut xinst.serialize()?);
+                                let xinst = cg::Instruction::op(
+                                    Op::IMul(width),
+                                    &[dest, Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap()))],
+                                );
+                                buffer.append(&mut xinst.serialize()?);
+                            }*/
+                            _ => todo!(
+                                "unimplemented opcode: {:?} in {:?}, of {:?}",
+                                opcode,
+                                inst,
+                                self.fun.name
+                            ),
+                        },
+                        _ => todo!(
+                            "unimplemented structure: {:?} in {:?}, of {:?}",
+                            instdata,
+                            inst,
+                            self.fun.name
+                        ),
+                    }
                 }
             }
         }
+        // Ok(())
     }
 
     pub fn reg_wrapper(&self) -> RegWrapper {

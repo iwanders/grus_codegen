@@ -109,6 +109,8 @@ impl X86Isa {
 
         let mut lirfun = crate::lir::Function::from_ir(&func);
         lirfun.lirify();
+        lirfun.lower();
+        println!("{lirfun:#?}");
 
         let regs = grus_regalloc::run(
             &lirfun.reg_wrapper(),
