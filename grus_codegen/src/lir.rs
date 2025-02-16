@@ -79,12 +79,12 @@ impl BlockId {
     }
 }
 
-// #[derive(Copy, Clone, Debug)]
-// struct Inst(usize);
-// use Inst as LirInst;
+#[derive(Copy, Clone, Debug)]
+pub struct Inst(usize);
+use Inst as LirInst;
 
 #[derive(Copy, Clone, Debug)]
-enum LirOperand {
+pub enum LirOperand {
     Virtual(Value),
     Machine(crate::codegen::Operand),
 }
@@ -100,11 +100,11 @@ impl From<crate::codegen::Operand> for LirOperand {
 }
 
 #[derive(Clone, Debug)]
-struct InstructionData {
-    operation: crate::codegen::Op,
+pub struct InstructionData {
+    pub operation: crate::codegen::Op,
     // Should we have def_operand and use_operand?
-    def_operands: Vec<LirOperand>,
-    use_operands: Vec<LirOperand>,
+    pub def_operands: Vec<LirOperand>,
+    pub use_operands: Vec<LirOperand>,
 }
 impl InstructionData {
     pub fn new(operation: crate::codegen::Op) -> Self {
@@ -132,7 +132,7 @@ impl InstructionData {
 
 #[derive(Clone, Debug)]
 struct Section {
-    lir_inst: Vec<InstructionData>,
+    lir_inst: Vec<LirInst>,
     ir_inst: Vec<IrInst>,
 }
 impl Section {
@@ -165,6 +165,9 @@ impl Block {
 pub struct Function {
     blocks: Vec<Block>,
     entry_block: Option<BlockId>,
+
+    instdata: Vec<InstructionData>,
+
     call_convention: CallConv,
     fun: CraneliftIrFunction,
 }
@@ -173,6 +176,7 @@ impl Function {
     pub fn from_ir(fun: &CraneliftIrFunction) -> Self {
         Self {
             blocks: vec![],
+            instdata: vec![],
             entry_block: None,
             call_convention: CallConv::SystemV,
             fun: fun.clone(),
@@ -246,7 +250,8 @@ impl Function {
 
         for b in self.blocks.iter_mut() {
             for s in b.sections.iter_mut() {
-                let lirs = &mut s.lir_inst;
+                // let lirs = &mut s.lir_inst;
+                let mut lirs = vec![];
                 for inst in s.ir_inst.iter() {
                     let instdata = self.fun.dfg.insts[*inst];
                     let def_ir = self.fun.dfg.inst_results(*inst);
@@ -369,13 +374,27 @@ impl Function {
                         ),
                     }
                 }
+
+                // Use the lirs, actually put instruction indices.
+                for l in lirs {
+                    let new_id = Inst(self.instdata.len());
+                    self.instdata.push(l);
+                    s.lir_inst.push(new_id);
+                }
             }
         }
-        // Ok(())
+    }
+
+    pub fn prune(&mut self) {
+        todo!("remove unused instructions, blocks")
     }
 
     pub fn reg_wrapper(&self) -> RegWrapper {
-        RegWrapper::new(&self.fun)
+        RegWrapper::new(&self)
+    }
+
+    pub fn inst_data(&self, inst: Inst) -> Option<&InstructionData> {
+        self.instdata.get(inst.0)
     }
 }
 
@@ -393,6 +412,7 @@ struct InstInfo {
     is_ret: bool,
     is_branch: bool,
     operands: Vec<RegOperand>,
+    inst: Inst,
 }
 
 #[derive(Debug)]
@@ -406,25 +426,93 @@ pub struct RegWrapper {
     block_succs: HashMap<RegBlock, Vec<RegBlock>>,
     block_preds: HashMap<RegBlock, Vec<RegBlock>>,
     inst_info: HashMap<RegInst, InstInfo>,
+    value_info: HashMap<Value, VReg>,
 }
 
 impl RegWrapper {
-    pub fn new(fun: &CraneliftIrFunction) -> Self {
-        let entry_block = RegBlock::new(
-            fun.layout
-                .entry_block()
-                .expect("regalloc function must have entry block")
-                .as_u32() as usize,
-        );
-
-        let num_insts = fun.stencil.dfg.num_insts();
-        let num_blocks = fun.stencil.dfg.num_blocks();
-        let num_values = fun.dfg.num_values();
-
+    pub fn new(lirfun: &Function) -> Self {
         let mut block_insn: HashMap<RegBlock, InstRange> = Default::default();
         let mut block_params: HashMap<RegBlock, Vec<VReg>> = Default::default();
         let mut block_succs: HashMap<RegBlock, Vec<RegBlock>> = Default::default();
         let mut block_preds: HashMap<RegBlock, Vec<RegBlock>> = Default::default();
+        let mut inst_info: HashMap<RegInst, InstInfo> = Default::default();
+        let mut value_info: HashMap<Value, VReg> = Default::default();
+
+        let fun = &lirfun.fun;
+        let entry_block = RegBlock::new(
+            lirfun
+                .entry_block
+                .expect("regalloc function must have entry block")
+                .0,
+        );
+
+        for b in lirfun.blocks.iter() {
+            for s in b.sections.iter() {
+                for inst in s.lir_inst.iter() {
+                    let data = lirfun.inst_data(*inst).expect("ill formed function");
+                    let mut operands = vec![];
+                    for z in data.use_operands.iter() {
+                        match z {
+                            LirOperand::Virtual(v) => {
+                                // Should do something here with retrieving the constraints of the opcode
+                                let regtype = RegClass::Int;
+                                let vreg = value_info
+                                    .entry(*v)
+                                    .or_insert_with(|| VReg::new(v.as_u32() as usize, regtype));
+                                let operand = RegOperand::new(
+                                    *vreg,
+                                    regalloc2::OperandConstraint::Any,
+                                    regalloc2::OperandKind::Use,
+                                    regalloc2::OperandPos::Early,
+                                );
+                                operands.push(operand);
+                            }
+                            LirOperand::Machine(r) => {
+                                todo!()
+                            }
+                        }
+                    }
+                    for z in data.def_operands.iter() {
+                        match z {
+                            LirOperand::Virtual(v) => {
+                                // Should do something here with retrieving the constraints of the opcode
+                                let regtype = RegClass::Int;
+                                let vreg = value_info
+                                    .entry(*v)
+                                    .or_insert_with(|| VReg::new(v.as_u32() as usize, regtype));
+                                let operand = RegOperand::new(
+                                    *vreg,
+                                    regalloc2::OperandConstraint::Any,
+                                    regalloc2::OperandKind::Def,
+                                    regalloc2::OperandPos::Late,
+                                );
+                                operands.push(operand);
+                            }
+                            LirOperand::Machine(r) => {
+                                todo!()
+                            }
+                        }
+                    }
+
+                    let reg_inst = RegInst::new(inst_info.len());
+
+                    let is_ret = data.operation.is_return();
+                    let is_branch = data.operation.is_branch();
+                    let info = InstInfo {
+                        is_ret,
+                        is_branch,
+                        operands,
+                        inst: *inst,
+                    };
+                    // println!(" irinst {irinst:?} with {info:?}");
+                    inst_info.insert(reg_inst, info);
+                }
+            }
+        }
+
+        let num_insts = fun.stencil.dfg.num_insts();
+        let num_blocks = fun.stencil.dfg.num_blocks();
+        let num_values = fun.dfg.num_values();
 
         let cfg = cranelift_codegen::flowgraph::ControlFlowGraph::with_function(fun);
 
@@ -484,62 +572,6 @@ impl RegWrapper {
             );
         }
 
-        let mut inst_info: HashMap<RegInst, InstInfo> = Default::default();
-        for cbl in fun.layout.blocks() {
-            for irinst in fun.layout.block_insts(cbl) {
-                let instdata = fun.dfg.insts[irinst];
-
-                let mut operands = vec![];
-
-                // Input arguments to instruction.
-                let arguments = instdata.arguments(&fun.dfg.value_lists);
-                // println!("Adding arguments to ir inst: {arguments:?} {irinst:?}");
-                for v in arguments {
-                    let valuetype = fun.dfg.value_type(*v);
-                    let regtype = if valuetype.is_int() {
-                        RegClass::Int
-                    } else {
-                        RegClass::Float
-                    };
-                    let operand = RegOperand::new(
-                        VReg::new(v.as_u32() as usize, regtype),
-                        regalloc2::OperandConstraint::Any,
-                        regalloc2::OperandKind::Use,
-                        regalloc2::OperandPos::Early,
-                    );
-                    operands.push(operand);
-                }
-
-                // Results of instruction.
-                for r in fun.dfg.inst_results(irinst) {
-                    let valuetype = fun.dfg.value_type(*r);
-                    let regtype = if valuetype.is_int() {
-                        RegClass::Int
-                    } else {
-                        RegClass::Float
-                    };
-                    let operand = RegOperand::new(
-                        VReg::new(r.as_u32() as usize, regtype),
-                        regalloc2::OperandConstraint::Any,
-                        regalloc2::OperandKind::Def,
-                        regalloc2::OperandPos::Late,
-                    );
-                    operands.push(operand);
-                }
-
-                let is_ret = instdata.opcode().is_return();
-                let is_branch = instdata.opcode().is_branch();
-                let info = InstInfo {
-                    is_ret,
-                    is_branch,
-                    operands,
-                };
-                println!(" irinst {irinst:?} with {info:?}");
-                let reg_inst = RegInst::new(irinst.as_u32() as usize);
-                inst_info.insert(reg_inst, info);
-            }
-        }
-
         // Find the first instruction in the entry block, into that instruction we'll inject the
         // function arguments.
         if let Some(first_insn) = fun
@@ -583,6 +615,7 @@ impl RegWrapper {
             block_succs,
             block_preds,
             inst_info,
+            value_info,
         }
     }
 }

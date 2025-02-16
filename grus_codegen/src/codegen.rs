@@ -43,6 +43,15 @@ impl Op {
             Op::Return => 0..=0,
         }
     }
+    pub fn is_return(&self) -> bool {
+        match self {
+            Op::Return => true,
+            _ => false,
+        }
+    }
+    pub fn is_branch(&self) -> bool {
+        false
+    }
 }
 
 /*

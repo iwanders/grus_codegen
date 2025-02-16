@@ -110,12 +110,10 @@ impl X86Isa {
         let mut lirfun = crate::lir::Function::from_ir(&func);
         lirfun.lirify();
         lirfun.lower();
+        let reg_wrapper = lirfun.reg_wrapper();
         println!("{lirfun:#?}");
 
-        let regs = grus_regalloc::run(
-            &lirfun.reg_wrapper(),
-            &grus_regalloc::simple_int_machine(4, 0),
-        )?;
+        let regs = grus_regalloc::run_ir(&func, &grus_regalloc::simple_int_machine(4, 0))?;
         debug!(" regs: {regs:#?}");
 
         for b in layout.blocks() {
