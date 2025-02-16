@@ -48,6 +48,14 @@ use cranelift_codegen::ir::{self, Value};
 
         And we can track which ir instructions resulted in which hw instructions, while still being
         able to create sections that contain just hw instructions, like with the calling convention?
+
+    Stages:
+        - Function::new(), just copies the cranelift function.
+        - lirify; creates lir blocks, copies each Cranelift Instruction into its own section.
+        - Lower; Creates hw instructions for each section, without register allocations.
+        - (register allocation?)
+        - Can create bytecode for sections now.
+        - Something with jumps and offsets.
 */
 use cranelift_codegen::isa::CallConv;
 use log::*;
@@ -83,6 +91,7 @@ enum LirOperand {
 #[derive(Clone, Debug)]
 struct InstructionData {
     operation: crate::codegen::Op,
+    // Should we have def_operand and use_operand?
     operands: Vec<LirOperand>,
 }
 
@@ -189,6 +198,23 @@ impl Function {
         let irentry = layout.entry_block().expect("should have entry block");
         let entryblockid = BlockId::from(irentry.as_u32() as usize);
         self.entry_block = Some(entryblockid);
+    }
+
+    /// Lower IR instructions to machine instructions
+    pub fn lower(&mut self) {
+        for b in self.blocks.iter_mut() {
+            for s in b.sections.iter_mut() {
+                for inst in s.ir_inst.iter() {
+                    let _instdata = self.fun.dfg.insts[*inst];
+                    todo!();
+
+                    // match instdata {
+                    // InstructionData::UnaryImm { opcode, imm } => {
+                    // }
+                    // }
+                }
+            }
+        }
     }
 
     pub fn reg_wrapper(&self) -> RegWrapper {
