@@ -148,11 +148,20 @@ impl Section {
 struct Block {
     sections: Vec<Section>,
     id: BlockId,
+
+    // block_param:
+    block_preds: Vec<BlockId>,
+    block_succs: Vec<BlockId>,
+
+    block_params: Vec<Value>,
 }
 impl Block {
     fn new(id: BlockId) -> Self {
         Self {
             sections: vec![],
+            block_succs: vec![],
+            block_preds: vec![],
+            block_params: vec![],
             id,
         }
     }
@@ -187,6 +196,8 @@ impl Function {
         let dfg = &self.fun.stencil.dfg;
         let layout = &self.fun.stencil.layout;
 
+        let cfg = cranelift_codegen::flowgraph::ControlFlowGraph::with_function(&self.fun);
+
         for b in layout.blocks() {
             let lirblockid = BlockId::from(b.as_u32() as usize);
             let mut lirblock = Block::new(lirblockid);
@@ -197,6 +208,17 @@ impl Function {
                 "block_data params: {:?}",
                 block_data.params(&dfg.value_lists)
             );
+
+            lirblock.block_succs = cfg
+                .succ_iter(b)
+                .map(|v| BlockId::from(v.as_u32() as usize))
+                .collect();
+            lirblock.block_preds = cfg
+                .pred_iter(b)
+                .map(|v| BlockId::from(v.block.as_u32() as usize))
+                .collect();
+
+            lirblock.block_params = dfg.block_params(b).iter().copied().collect();
 
             for inst in layout.block_insts(b) {
                 let s = Section::from_ir(inst);
@@ -447,6 +469,10 @@ impl RegWrapper {
         );
 
         for b in lirfun.blocks.iter() {
+            let regblock = RegBlock::new(b.id.0);
+
+            let mut first_inst = None;
+            let mut last_inst = None;
             for s in b.sections.iter() {
                 for inst in s.lir_inst.iter() {
                     let data = lirfun.inst_data(*inst).expect("ill formed function");
@@ -467,7 +493,7 @@ impl RegWrapper {
                                 );
                                 operands.push(operand);
                             }
-                            LirOperand::Machine(r) => {
+                            LirOperand::Machine(_r) => {
                                 todo!()
                             }
                         }
@@ -488,13 +514,17 @@ impl RegWrapper {
                                 );
                                 operands.push(operand);
                             }
-                            LirOperand::Machine(r) => {
+                            LirOperand::Machine(_r) => {
                                 todo!()
                             }
                         }
                     }
 
                     let reg_inst = RegInst::new(inst_info.len());
+                    if first_inst.is_none() {
+                        first_inst = Some(reg_inst);
+                    }
+                    last_inst = Some(reg_inst);
 
                     let is_ret = data.operation.is_return();
                     let is_branch = data.operation.is_branch();
@@ -504,73 +534,43 @@ impl RegWrapper {
                         operands,
                         inst: *inst,
                     };
-                    // println!(" irinst {irinst:?} with {info:?}");
                     inst_info.insert(reg_inst, info);
                 }
             }
-        }
 
-        let num_insts = fun.stencil.dfg.num_insts();
-        let num_blocks = fun.stencil.dfg.num_blocks();
-        let num_values = fun.dfg.num_values();
-
-        let cfg = cranelift_codegen::flowgraph::ControlFlowGraph::with_function(fun);
-
-        for cbl in fun.layout.blocks() {
-            // let cbl = IrBlock::from_u32(block.raw_u32());
-            let regblock = RegBlock::new(cbl.as_u32() as usize);
-            // let block = &fun.dfg.blocks[cbl];
-
-            // Store all block parameter entries.
-            let these_block_params = block_params.entry(regblock).or_default();
-            for v in fun.dfg.block_params(cbl) {
-                let valuetype = fun.dfg.value_type(*v);
-                let regtype = if valuetype.is_int() {
-                    RegClass::Int
-                } else {
-                    RegClass::Float
-                };
-                let vreg = VReg::new(v.as_u32() as usize, regtype);
-                these_block_params.push(vreg);
-            }
-
-            let mut actual_instructions: Vec<IrInst> = vec![];
-            for i in fun.layout.block_insts(cbl) {
-                if let Some(previous) = actual_instructions.last() {
-                    let prior_i = previous.as_u32();
-                    let current = i.as_u32();
-                    if prior_i + 1 != current {
-                        panic!("block doesn't have consecutive range");
-                    }
-                }
-                actual_instructions.push(i);
-            }
-            println!("actual_instructions: {actual_instructions:?}");
-            let start = actual_instructions.first().unwrap();
-            let last = actual_instructions.last().unwrap();
-            let start = RegInst::new(start.as_u32() as usize);
-            let last = RegInst::new(last.as_u32() as usize + 1);
-            block_insn.insert(regblock, InstRange::new(start, last));
+            block_insn.insert(
+                regblock,
+                InstRange::new(
+                    first_inst.expect("block should have instruction"),
+                    last_inst.expect("block should have instruction"),
+                ),
+            );
 
             block_succs.insert(
                 regblock,
-                cfg.succ_iter(cbl)
-                    .map(|v| {
-                        // let block = fun.layout.inst_block(&v.block).expect("instruction doesn't have block");
-                        RegBlock::new(v.as_u32() as usize)
-                    })
-                    .collect(),
+                b.block_succs.iter().map(|v| RegBlock::new(v.0)).collect(),
             );
+
             block_preds.insert(
                 regblock,
-                cfg.pred_iter(cbl)
-                    .map(|v| {
-                        // let block = fun.layout.inst_block(&v.block).expect("instruction doesn't have block");
-                        RegBlock::new(v.block.as_u32() as usize)
-                    })
-                    .collect(),
+                b.block_preds.iter().map(|v| RegBlock::new(v.0)).collect(),
             );
+
+            let these_block_params = block_params.entry(regblock).or_default();
+            for v in b.block_params.iter() {
+                let regtype = RegClass::Int;
+                let vreg = value_info
+                    .entry(*v)
+                    .or_insert_with(|| VReg::new(v.as_u32() as usize, regtype));
+                these_block_params.push(*vreg);
+            }
         }
+
+        let num_insts = inst_info.len();
+        let num_blocks = block_insn.len();
+        let num_values = value_info.len();
+
+        /*
 
         // Find the first instruction in the entry block, into that instruction we'll inject the
         // function arguments.
@@ -604,6 +604,7 @@ impl RegWrapper {
                 first_info.operands.push(operand);
             }
         }
+        */
 
         Self {
             num_insts,
