@@ -107,7 +107,8 @@ impl X86Isa {
         let rg2x = |p: regalloc2::PReg| regmap[p.index()];
         // let scratch = Reg::EBX;
 
-        let lirfun = crate::lir::Function::from_ir(&func);
+        let mut lirfun = crate::lir::Function::from_ir(&func);
+        lirfun.lirify();
 
         let regs = grus_regalloc::run(
             &lirfun.reg_wrapper(),

@@ -2,7 +2,7 @@
 #![allow(unused_imports)]
 use cranelift_codegen::ir::Function as CraneliftIrFunction;
 use cranelift_codegen::ir::Inst as IrInst;
-use cranelift_codegen::ir::Value;
+use cranelift_codegen::ir::{self, Value};
 /**
     A low(er) level intermediate representation.
 */
@@ -50,6 +50,7 @@ use cranelift_codegen::ir::Value;
         able to create sections that contain just hw instructions, like with the calling convention?
 */
 use cranelift_codegen::isa::CallConv;
+use log::*;
 
 /*
 use regalloc2::Block as RegBlock;
@@ -90,30 +91,108 @@ struct Section {
     lir_inst: Vec<LirInst>,
     ir_inst: Vec<IrInst>,
 }
+impl Section {
+    fn from_ir(v: IrInst) -> Self {
+        Self {
+            lir_inst: vec![],
+            ir_inst: vec![v],
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 struct Block {
     sections: Vec<Section>,
+    id: BlockId,
+}
+impl Block {
+    fn new(id: BlockId) -> Self {
+        Self {
+            sections: vec![],
+            id,
+        }
+    }
+    pub fn push_section(&mut self, section: Section) {
+        self.sections.push(section)
+    }
 }
 
 pub struct Function {
     blocks: Vec<Block>,
-    entry_block: BlockId,
+    entry_block: Option<BlockId>,
     call_convention: CallConv,
-    original: CraneliftIrFunction,
+    fun: CraneliftIrFunction,
 }
 
 impl Function {
     pub fn from_ir(fun: &CraneliftIrFunction) -> Self {
         Self {
             blocks: vec![],
-            entry_block: BlockId::from(0),
+            entry_block: None,
             call_convention: CallConv::SystemV,
-            original: fun.clone(),
+            fun: fun.clone(),
         }
     }
+
+    pub fn lirify(&mut self) {
+        let dfg = &self.fun.stencil.dfg;
+        let layout = &self.fun.stencil.layout;
+
+        for b in layout.blocks() {
+            let lirblockid = BlockId::from(b.as_u32() as usize);
+            let mut lirblock = Block::new(lirblockid);
+
+            debug!("b: {b:?}");
+            let block_data = &dfg.blocks[b];
+            debug!(
+                "block_data params: {:?}",
+                block_data.params(&dfg.value_lists)
+            );
+
+            for inst in layout.block_insts(b) {
+                let s = Section::from_ir(inst);
+                lirblock.push_section(s);
+
+                debug!("inst: {inst:?}");
+                let instdata = dfg.insts[inst];
+                debug!("  instruction_data: {instdata:?}");
+                let arguments = instdata.arguments(&dfg.value_lists);
+                let type_of = |v: &ir::Value| dfg.value_type(*v);
+                let types_of =
+                    |v: &[ir::Value]| v.iter().map(|z| dfg.value_type(*z)).collect::<Vec<_>>();
+                debug!("  args: {:?} types: {:?}", arguments, types_of(arguments));
+
+                // let allocs_args = regs.inst_allocs(RegInst::new(inst.as_u32() as usize));
+                // debug!("  allocs: {allocs_args:?}");
+                // let use_allocs = &allocs_args[0..arguments.len()];
+                // debug!("  use_allocs: {use_allocs:?}");
+                // let def_allocs = &allocs_args[arguments.len().min(arguments.len() + 1)..];
+                // debug!("  def_allocs: {def_allocs:?}");
+
+                debug!(
+                    "  results? {:?} -> {:?}  (types: {:?}) ",
+                    dfg.has_results(inst),
+                    dfg.inst_results(inst),
+                    types_of(dfg.inst_results(inst))
+                );
+                let typevar_operand = instdata.typevar_operand(&dfg.value_lists);
+                debug!(
+                    "  typevar_operand: {:?}, type: {:?}",
+                    typevar_operand,
+                    typevar_operand.as_ref().map(type_of)
+                );
+                debug!("  opcode: {:?}", instdata.opcode());
+            }
+            self.blocks.push(lirblock);
+        }
+
+        let irentry = layout.entry_block().expect("should have entry block");
+        let entryblockid = BlockId::from(irentry.as_u32() as usize);
+        self.entry_block = Some(entryblockid);
+    }
+
     pub fn reg_wrapper(&self) -> RegWrapper {
-        RegWrapper::new(&self.original)
+        RegWrapper::new(&self.fun)
     }
 }
 
