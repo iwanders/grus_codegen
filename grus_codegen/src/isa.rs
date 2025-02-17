@@ -117,6 +117,7 @@ impl X86Isa {
 
         lirfun.apply_regalloc(&reg_wrapper, &reg_outputs);
         lirfun.patch_returns();
+        lirfun.patch_operations();
 
         buffer = lirfun.assemble();
 

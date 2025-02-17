@@ -338,16 +338,18 @@ impl Function {
                                 if args.len(&self.fun.dfg.value_lists) != 1 {
                                     todo!()
                                 }
-                                lirs.push(
-                                    new_op(Op::Return).with_use(&[use_ir[0]]), // .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
-                                );
-                                /*lirs.push(
-                                    new_op(Op::Mov(Width::W64))
-                                        .with_use(&[use_ir[0]])
-                                        .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
-                                );
-                                lirs.push(new_op(Op::Return));
-                                */
+                                if true {
+                                    lirs.push(
+                                        new_op(Op::Return).with_use(&[use_ir[0]]), // .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
+                                    );
+                                } else {
+                                    lirs.push(
+                                        new_op(Op::Mov(Width::W64))
+                                            .with_use(&[use_ir[0]])
+                                            .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
+                                    );
+                                    lirs.push(new_op(Op::Return));
+                                }
                             }
                             _ => todo!(
                                 "unimplemented opcode: {:?} in {:?}, of {:?}",
@@ -363,19 +365,20 @@ impl Function {
                                     .as_ref()
                                     .map(type_of)
                                     .map(|z| z.into())
-                                    .unwrap_or(Width::W64);
+                                    .unwrap();
 
                                 // x86 add overwrites the first operand, so for now:
                                 //    Move operand one into destination.
                                 //    Add operand two to destination.
-                                lirs.push(
-                                    new_op(Op::Mov(width))
-                                        .with_use(&[use_ir[0]])
-                                        .with_def(&[def_ir[0]]),
-                                );
+                                // lirs.push(
+                                // new_op(Op::Mov(width))
+                                // .with_use(&[use_ir[0]])
+                                // .with_def(&[def_ir[0]]),
+                                // );
+                                // That violated ssa!
                                 lirs.push(
                                     new_op(Op::IAdd(width))
-                                        .with_use(&[def_ir[0], use_ir[1]])
+                                        .with_use(&[use_ir[0], use_ir[1]])
                                         .with_def(&[def_ir[0]]),
                                 );
                             }
@@ -518,9 +521,6 @@ impl Function {
                         info!("Patching {instdata:?}");
                         info!("Patching {:?}", s.lir_inst);
 
-                        // let new_id = Inst(self.instdata.len());
-                        // self.instdata.push(l);
-                        // s.lir_inst.push(new_id);
                         self.instdata.push(
                             new_op(Op::Mov(Width::W64))
                                 .with_use(&[instdata.use_operands[0]])
@@ -538,6 +538,43 @@ impl Function {
             }
         }
     }
+    pub fn patch_operations(&mut self) {
+        let new_op = InstructionData::new;
+        use crate::codegen::{Op, Operand, Width};
+
+        for b in self.blocks.iter_mut() {
+            for s in b.sections.iter_mut() {
+                let mut new_inst = vec![];
+                for (si, sint) in s.lir_inst.iter().enumerate() {
+                    let new_id = Inst(self.instdata.len());
+                    let instdata = &mut self.instdata[sint.0];
+                    match instdata.operation {
+                        crate::codegen::Op::IAdd(_) => {
+                            let dest = instdata.def_operands[0];
+                            let src0 = instdata.use_operands[0];
+                            let src1 = instdata.use_operands[1];
+
+                            // Insert a new move that moves src0 into dest.
+                            instdata.use_operands.remove(0);
+                            new_inst.push((
+                                si,
+                                new_op(Op::Mov(Width::W64))
+                                    .with_use(&[src0])
+                                    .with_def(&[dest]),
+                            ));
+                        }
+                        _ => {}
+                    }
+                }
+                new_inst.reverse();
+                for (si, d) in new_inst {
+                    let new_id = Inst(self.instdata.len());
+                    s.lir_inst.insert(si, new_id);
+                    self.instdata.push(d);
+                }
+            }
+        }
+    }
 
     pub fn assemble(&self) -> Vec<u8> {
         let mut v = vec![];
@@ -545,6 +582,7 @@ impl Function {
         for b in self.blocks.iter() {
             for s in b.sections.iter() {
                 for i in s.lir_inst.iter() {
+                    debug!("assembling: {:?}", self.instdata[i.0]);
                     let mut z = self.instdata[i.0].assemble().unwrap();
                     v.append(&mut z);
                 }
@@ -748,6 +786,8 @@ impl RegWrapper {
 
                 first_info.operands.push(operand);
             }
+        } else {
+            panic!()
         }
 
         let num_insts = inst_info.len();
