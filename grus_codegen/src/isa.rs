@@ -118,6 +118,20 @@ impl X86Isa {
         lirfun.apply_regalloc(&reg_wrapper, &reg_outputs);
         lirfun.patch_returns();
 
+        buffer = lirfun.assemble();
+
+        let mut s = String::new();
+        for b in buffer.iter() {
+            s += &format!(" 0x{b:0>2x}");
+        }
+        warn!("buffer: echo {s}");
+
+        return Ok(CompiledCode {
+            buffer,
+            // Size of stack frame, in bytes.
+            // frame_size,
+        });
+
         let regs = grus_regalloc::run_ir(&func, &grus_regalloc::simple_int_machine(4, 0))?;
         debug!(" regs: {regs:#?}");
 

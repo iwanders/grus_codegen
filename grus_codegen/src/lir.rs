@@ -137,6 +137,24 @@ impl InstructionData {
                 .iter()
                 .any(|v| matches!(v, LirOperand::Virtual(_)))
     }
+    pub fn assemble(&self) -> Result<Vec<u8>, crate::codegen::CodegenError> {
+        let mut opv = crate::codegen::OperandVec::new();
+        for cont in [&self.def_operands, &self.use_operands] {
+            for v in cont.iter() {
+                match v {
+                    LirOperand::Machine(r) => opv.push(*r),
+                    LirOperand::Virtual(_) => {
+                        todo!()
+                    }
+                }
+            }
+        }
+        let inst = crate::codegen::Instruction {
+            op: self.operation,
+            operands: opv,
+        };
+        inst.serialize()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -519,6 +537,20 @@ impl Function {
                 }
             }
         }
+    }
+
+    pub fn assemble(&self) -> Vec<u8> {
+        let mut v = vec![];
+
+        for b in self.blocks.iter() {
+            for s in b.sections.iter() {
+                for i in s.lir_inst.iter() {
+                    let mut z = self.instdata[i.0].assemble().unwrap();
+                    v.append(&mut z);
+                }
+            }
+        }
+        v
     }
 }
 
