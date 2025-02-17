@@ -24,7 +24,7 @@ pub enum CodegenError {
     InvalidOperandCount { got: usize, expected: OperandRange },
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub enum Op {
     Mov(Width),
     IAdd(Width),
@@ -124,7 +124,7 @@ impl From<ModRM> for u8 {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub enum Width {
     W128,
     W64,

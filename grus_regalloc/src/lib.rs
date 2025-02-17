@@ -335,6 +335,7 @@ mod winged {
         }
 
         for insn in fun.block_insns(entry_b).iter() {
+            println!("Instzzzz: {insn:?}");
             let ops = fun.inst_operands(insn);
             let is_early_first_instruction = Some(insn) == first_instruction;
             for stage in [regalloc2::OperandPos::Early, regalloc2::OperandPos::Late] {
@@ -405,10 +406,14 @@ mod winged {
             }
         }
         println!("Machine; {machine:#?}");
+        for insn in fun.block_insns(entry_b).iter() {
+            println!("zzzxxx insn: {insn:?}");
+        }
 
         for insn in fun.block_insns(entry_b).iter() {
             let ops = fun.inst_operands(insn);
             let is_first_instruction = Some(insn) == first_instruction;
+            // let is_first_instruction = false;
 
             println!("ops: {ops:?} insn: {insn:?}");
             for op in ops {

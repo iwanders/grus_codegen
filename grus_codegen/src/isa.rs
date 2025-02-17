@@ -112,6 +112,11 @@ impl X86Isa {
         lirfun.lower();
         let reg_wrapper = lirfun.reg_wrapper();
         println!("{lirfun:#?}");
+        let reg_outputs =
+            grus_regalloc::run(&reg_wrapper, &grus_regalloc::simple_int_machine(4, 0))?;
+
+        lirfun.apply_regalloc(&reg_wrapper, &reg_outputs);
+        lirfun.patch_returns();
 
         let regs = grus_regalloc::run_ir(&func, &grus_regalloc::simple_int_machine(4, 0))?;
         debug!(" regs: {regs:#?}");

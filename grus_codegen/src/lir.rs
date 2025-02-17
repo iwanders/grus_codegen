@@ -128,6 +128,15 @@ impl InstructionData {
             use_operands: self.use_operands,
         }
     }
+    pub fn has_virtuals(&self) -> bool {
+        self.use_operands
+            .iter()
+            .any(|v| matches!(v, LirOperand::Virtual(_)))
+            || self
+                .def_operands
+                .iter()
+                .any(|v| matches!(v, LirOperand::Virtual(_)))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -179,6 +188,7 @@ pub struct Function {
 
     call_convention: CallConv,
     fun: CraneliftIrFunction,
+    fun_args: Vec<Value>,
 }
 
 impl Function {
@@ -186,6 +196,7 @@ impl Function {
         Self {
             blocks: vec![],
             instdata: vec![],
+            fun_args: vec![],
             entry_block: None,
             call_convention: CallConv::SystemV,
             fun: fun.clone(),
@@ -197,6 +208,15 @@ impl Function {
         let layout = &self.fun.stencil.layout;
 
         let cfg = cranelift_codegen::flowgraph::ControlFlowGraph::with_function(&self.fun);
+
+        let ir_entry_block = self
+            .fun
+            .layout
+            .entry_block()
+            .expect("should have entry block");
+        for v in dfg.block_params(ir_entry_block).iter() {
+            self.fun_args.push(*v);
+        }
 
         for b in layout.blocks() {
             let lirblockid = BlockId::from(b.as_u32() as usize);
@@ -301,11 +321,15 @@ impl Function {
                                     todo!()
                                 }
                                 lirs.push(
+                                    new_op(Op::Return).with_use(&[use_ir[0]]), // .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
+                                );
+                                /*lirs.push(
                                     new_op(Op::Mov(Width::W64))
                                         .with_use(&[use_ir[0]])
                                         .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
                                 );
                                 lirs.push(new_op(Op::Return));
+                                */
                             }
                             _ => todo!(
                                 "unimplemented opcode: {:?} in {:?}, of {:?}",
@@ -418,6 +442,84 @@ impl Function {
     pub fn inst_data(&self, inst: Inst) -> Option<&InstructionData> {
         self.instdata.get(inst.0)
     }
+
+    pub fn apply_regalloc(&mut self, wrapper: &RegWrapper, regs: &RegOutput) {
+        use crate::codegen::Reg;
+        let regmap = [
+            Reg::EDI, // PReg(0),
+            Reg::ESI, // PReg(1),
+            Reg::EDX, // PReg(2),
+            Reg::ECX, // PReg(3),
+                      // Reg::R8,  // PReg(4),
+                      // Reg::R9,  // PReg(5),
+                      // Reg::R10, Reg::R11, Reg::R12, Reg::R13, Reg::R14, Reg::R15
+        ];
+        let rg2x = |p: regalloc2::PReg| regmap[p.index()];
+
+        // Loop must match the order in the wrapper creator.
+        for (reginst, info) in wrapper.inst_info.iter() {
+            println!("regs: {regs:#?}");
+            let inst_data = &mut self.instdata[info.inst.0];
+            if !inst_data.has_virtuals() {
+                continue;
+            }
+            let allocs_args = regs.inst_allocs(*reginst);
+            let use_allocs = &allocs_args[0..];
+            let mut index = 0;
+            // let use_allocs = &allocs_args[0..inst_data.use_operands.len()];
+            for cont in [&mut inst_data.use_operands, &mut inst_data.def_operands] {
+                for z in cont.iter_mut() {
+                    match z {
+                        LirOperand::Virtual(v) => {
+                            *z = LirOperand::Machine(crate::codegen::Operand::Reg(rg2x(
+                                use_allocs[index].as_reg().unwrap(),
+                            )));
+                            index += 1;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            println!("after: {inst_data:#?}");
+        }
+    }
+
+    pub fn patch_returns(&mut self) {
+        // Returns previously got a use register that is an 'any'... we patch in a move here
+        // in the the register allocator should do this.
+
+        let new_op = InstructionData::new;
+        use crate::codegen::{Op, Operand, Width};
+
+        for b in self.blocks.iter_mut() {
+            for s in b.sections.iter_mut() {
+                if let Some(last) = s.lir_inst.last() {
+                    let instdata = &self.instdata[last.0];
+                    let new_id = Inst(self.instdata.len());
+                    if instdata.operation == crate::codegen::Op::Return {
+                        info!("Patching {instdata:?}");
+                        info!("Patching {:?}", s.lir_inst);
+
+                        // let new_id = Inst(self.instdata.len());
+                        // self.instdata.push(l);
+                        // s.lir_inst.push(new_id);
+                        self.instdata.push(
+                            new_op(Op::Mov(Width::W64))
+                                .with_use(&[instdata.use_operands[0]])
+                                .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
+                        );
+
+                        self.instdata[last.0].use_operands.clear(); // clear the use for return.
+                                                                    // insert the new move.
+                        s.lir_inst.insert(s.lir_inst.len() - 1, new_id);
+
+                        info!("Patching {:?}", self.instdata);
+                        info!("      {:?}", s.lir_inst);
+                    }
+                }
+            }
+        }
+    }
 }
 
 // use cranelift_codegen::ir::Inst as IrInst;
@@ -425,6 +527,7 @@ use regalloc2::Block as RegBlock;
 use regalloc2::Function as RegFunction;
 use regalloc2::Inst as RegInst;
 use regalloc2::Operand as RegOperand;
+use regalloc2::Output as RegOutput;
 use regalloc2::{InstRange, PRegSet, RegClass, VReg};
 
 use std::collections::HashMap;
@@ -468,11 +571,14 @@ impl RegWrapper {
                 .0,
         );
 
+        let mut first_inst_in_fun = None;
+
         for b in lirfun.blocks.iter() {
             let regblock = RegBlock::new(b.id.0);
 
             let mut first_inst = None;
             let mut last_inst = None;
+
             for s in b.sections.iter() {
                 for inst in s.lir_inst.iter() {
                     let data = lirfun.inst_data(*inst).expect("ill formed function");
@@ -493,8 +599,15 @@ impl RegWrapper {
                                 );
                                 operands.push(operand);
                             }
-                            LirOperand::Machine(_r) => {
-                                todo!()
+                            LirOperand::Machine(r) => {
+                                match r {
+                                    crate::codegen::Operand::Immediate(_) => {
+                                        // Not actually an operand for register allocation.
+                                    }
+                                    crate::codegen::Operand::Reg(r) => {
+                                        todo!("{r:?}");
+                                    }
+                                }
                             }
                         }
                     }
@@ -514,8 +627,15 @@ impl RegWrapper {
                                 );
                                 operands.push(operand);
                             }
-                            LirOperand::Machine(_r) => {
-                                todo!()
+                            LirOperand::Machine(r) => {
+                                match r {
+                                    crate::codegen::Operand::Immediate(_) => {
+                                        // Not actually an operand for register allocation.
+                                    }
+                                    crate::codegen::Operand::Reg(r) => {
+                                        todo!("{r:?} for {data:?}");
+                                    }
+                                }
                             }
                         }
                     }
@@ -524,7 +644,11 @@ impl RegWrapper {
                     if first_inst.is_none() {
                         first_inst = Some(reg_inst);
                     }
+                    if first_inst_in_fun.is_none() {
+                        first_inst_in_fun = Some(reg_inst);
+                    }
                     last_inst = Some(reg_inst);
+                    println!("assigning {last_inst:?}");
 
                     let is_ret = data.operation.is_return();
                     let is_branch = data.operation.is_branch();
@@ -538,13 +662,15 @@ impl RegWrapper {
                 }
             }
 
-            block_insn.insert(
-                regblock,
-                InstRange::new(
-                    first_inst.expect("block should have instruction"),
-                    last_inst.expect("block should have instruction"),
-                ),
+            // WHY!?
+            error!("seriously wonky +1 here to ensure register allocation works");
+            let last_plus_one = last_inst.map(|v| RegInst::new(v.0 as usize + 1));
+            let range = InstRange::new(
+                first_inst.expect("block should have instruction"),
+                last_plus_one.expect("block should have instruction"),
             );
+            println!("Assigning {regblock:?} with {range:?}");
+            block_insn.insert(regblock, range);
 
             block_succs.insert(
                 regblock,
@@ -566,36 +692,23 @@ impl RegWrapper {
             }
         }
 
-        let num_insts = inst_info.len();
-        let num_blocks = block_insn.len();
-        let num_values = value_info.len();
-
-        /*
-
         // Find the first instruction in the entry block, into that instruction we'll inject the
         // function arguments.
-        if let Some(first_insn) = fun
-            .layout
-            .first_inst(fun.layout.entry_block().expect("should have entry block"))
-        {
-            let reg_inst = RegInst::new(first_insn.as_u32() as usize);
+        if let Some(reg_inst) = first_inst_in_fun {
             let first_info = inst_info
                 .get_mut(&reg_inst)
                 .expect("no info for first instruction");
-            let ir_entry_block = fun.layout.entry_block().expect("should have entry block");
-            for (i, v) in fun.dfg.block_params(ir_entry_block).iter().enumerate() {
-                let valuetype = fun.dfg.value_type(*v);
-                let regtype = if valuetype.is_int() {
-                    RegClass::Int
-                } else {
-                    RegClass::Float
-                };
-                let vreg = VReg::new(v.as_u32() as usize, regtype);
+            for (i, v) in lirfun.fun_args.iter().enumerate() {
+                let regtype = RegClass::Int;
+
+                let vreg = value_info
+                    .entry(*v)
+                    .or_insert_with(|| VReg::new(v.as_u32() as usize, regtype));
                 let preg = regalloc2::PReg::new(i, regtype);
 
                 println!("Note to self, hardcoded call convention; {vreg:?} -> {preg:?}");
                 let operand = RegOperand::new(
-                    vreg,
+                    *vreg,
                     regalloc2::OperandConstraint::FixedReg(preg),
                     regalloc2::OperandKind::Def,
                     regalloc2::OperandPos::Early,
@@ -604,7 +717,11 @@ impl RegWrapper {
                 first_info.operands.push(operand);
             }
         }
-        */
+
+        let num_insts = inst_info.len();
+        let num_blocks = block_insn.len();
+        let num_values = value_info.len();
+        println!("block_insn: {block_insn:#?}");
 
         Self {
             num_insts,
