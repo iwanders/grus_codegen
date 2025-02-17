@@ -382,50 +382,39 @@ impl Function {
                                         .with_def(&[def_ir[0]]),
                                 );
                             }
-                            /*
                             ir::Opcode::Isub => {
                                 let width: Width = typevar_operand
                                     .as_ref()
                                     .map(type_of)
-                                    .with_context(|| "could not determine width")?
-                                    .into();
+                                    .map(|z| z.into())
+                                    .unwrap();
 
                                 // x86 add overwrites the first operand, so for now:
                                 //    Move operand one into destination.
                                 //    Add operand two to destination.
-                                let dest = Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap()));
-                                let xinst = cg::Instruction::op(
-                                    Op::Mov(width),
-                                    &[dest, Operand::Reg(rg2x(use_allocs[0].as_reg().unwrap()))],
+                                lirs.push(
+                                    new_op(Op::ISub(width))
+                                        .with_use(&[use_ir[0], use_ir[1]])
+                                        .with_def(&[def_ir[0]]),
                                 );
-                                buffer.append(&mut xinst.serialize()?);
-                                let xinst = cg::Instruction::op(
-                                    Op::ISub(width),
-                                    &[dest, Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap()))],
-                                );
-                                buffer.append(&mut xinst.serialize()?);
                             }
+
                             ir::Opcode::Imul => {
                                 let width: Width = typevar_operand
                                     .as_ref()
                                     .map(type_of)
-                                    .with_context(|| "could not determine width")?
-                                    .into();
+                                    .map(|z| z.into())
+                                    .unwrap();
 
                                 // x86 integer mul supports three forms, we use the two-operand
                                 // version here, this multiplies into the destination.
-                                let dest = Operand::Reg(rg2x(def_allocs[0].as_reg().unwrap()));
-                                let xinst = cg::Instruction::op(
-                                    Op::Mov(width),
-                                    &[dest, Operand::Reg(rg2x(use_allocs[0].as_reg().unwrap()))],
+
+                                lirs.push(
+                                    new_op(Op::IMul(width))
+                                        .with_use(&[use_ir[0], use_ir[1]])
+                                        .with_def(&[def_ir[0]]),
                                 );
-                                buffer.append(&mut xinst.serialize()?);
-                                let xinst = cg::Instruction::op(
-                                    Op::IMul(width),
-                                    &[dest, Operand::Reg(rg2x(use_allocs[1].as_reg().unwrap()))],
-                                );
-                                buffer.append(&mut xinst.serialize()?);
-                            }*/
+                            }
                             _ => todo!(
                                 "unimplemented opcode: {:?} in {:?}, of {:?}",
                                 opcode,
@@ -549,7 +538,9 @@ impl Function {
                     let new_id = Inst(self.instdata.len());
                     let instdata = &mut self.instdata[sint.0];
                     match instdata.operation {
-                        crate::codegen::Op::IAdd(_) => {
+                        crate::codegen::Op::IAdd(_)
+                        | crate::codegen::Op::ISub(_)
+                        | crate::codegen::Op::IMul(_) => {
                             let dest = instdata.def_operands[0];
                             let src0 = instdata.use_operands[0];
                             let src1 = instdata.use_operands[1];
