@@ -161,13 +161,20 @@ impl InstructionData {
 struct Section {
     lir_inst: Vec<LirInst>,
     ir_inst: Vec<IrInst>,
+    ir_regs: Vec<Vec<crate::codegen::Reg>>,
+    is_lowered: bool,
 }
 impl Section {
     fn from_ir(v: IrInst) -> Self {
         Self {
             lir_inst: vec![],
             ir_inst: vec![v],
+            ir_regs: vec![],
+            is_lowered: false,
         }
+    }
+    pub fn is_lowered(&self) -> bool {
+        self.is_lowered
     }
 }
 
@@ -301,7 +308,7 @@ impl Function {
     }
 
     /// Lower IR instructions to partial machine instructions
-    pub fn lower(&mut self) {
+    pub fn lower_first(&mut self) {
         let new_op = InstructionData::new;
         use crate::codegen::{Op, Operand, Width};
         let dfg = &self.fun.dfg;
@@ -338,6 +345,7 @@ impl Function {
                                 if args.len(&self.fun.dfg.value_lists) != 1 {
                                     todo!()
                                 }
+                                /*
                                 if true {
                                     lirs.push(
                                         new_op(Op::Return).with_use(&[use_ir[0]]), // .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
@@ -349,7 +357,7 @@ impl Function {
                                             .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
                                     );
                                     lirs.push(new_op(Op::Return));
-                                }
+                                }*/
                             }
                             _ => todo!(
                                 "unimplemented opcode: {:?} in {:?}, of {:?}",
@@ -436,6 +444,7 @@ impl Function {
                     let new_id = Inst(self.instdata.len());
                     self.instdata.push(l);
                     s.lir_inst.push(new_id);
+                    s.is_lowered = true;
                 }
             }
         }
@@ -469,64 +478,118 @@ impl Function {
         // Loop must match the order in the wrapper creator.
         for (reginst, info) in wrapper.inst_info.iter() {
             println!("regs: {regs:#?}");
-            let inst_data = &mut self.instdata[info.inst.0];
-            if !inst_data.has_virtuals() {
-                continue;
-            }
-            let allocs_args = regs.inst_allocs(*reginst);
-            let use_allocs = &allocs_args[0..];
-            let mut index = 0;
-            // let use_allocs = &allocs_args[0..inst_data.use_operands.len()];
-            for cont in [&mut inst_data.use_operands, &mut inst_data.def_operands] {
-                for z in cont.iter_mut() {
-                    match z {
-                        LirOperand::Virtual(v) => {
-                            *z = LirOperand::Machine(crate::codegen::Operand::Reg(rg2x(
-                                use_allocs[index].as_reg().unwrap(),
-                            )));
-                            index += 1;
+            match info.inst {
+                LirOrIrInst::Lir(inst) => {
+                    let inst_data = &mut self.instdata[inst.0];
+                    if !inst_data.has_virtuals() {
+                        continue;
+                    }
+                    let allocs_args = regs.inst_allocs(*reginst);
+                    let use_allocs = &allocs_args[0..];
+                    println!("use_allocs.len: {}", use_allocs.len());
+                    let mut index = 0;
+                    // let use_allocs = &allocs_args[0..inst_data.use_operands.len()];
+                    for cont in [&mut inst_data.use_operands, &mut inst_data.def_operands] {
+                        for z in cont.iter_mut() {
+                            match z {
+                                LirOperand::Virtual(v) => {
+                                    *z = LirOperand::Machine(crate::codegen::Operand::Reg(rg2x(
+                                        use_allocs[index].as_reg().unwrap(),
+                                    )));
+                                    index += 1;
+                                }
+                                _ => {}
+                            }
                         }
-                        _ => {}
+                    }
+                    // println!("after: {inst_data:#?}, index: {index} ops: {}", info.operands.len());
+                    if index != use_allocs.len() {
+                        panic!();
                     }
                 }
+                LirOrIrInst::Ir(inst) => {
+                    let allocs_args = regs.inst_allocs(*reginst);
+                    let allocs = &allocs_args[0..];
+
+                    // Find the section that has this instruction.
+                    let mut block_si_and_ii = None;
+                    for (bi, b) in self.blocks.iter().enumerate() {
+                        for (si, s) in b.sections.iter().enumerate() {
+                            for (ii, i) in s.ir_inst.iter().enumerate() {
+                                if *i == inst {
+                                    block_si_and_ii = Some((bi, si, ii));
+                                }
+                            }
+                        }
+                    }
+                    let (bi, si, ii) =
+                        block_si_and_ii.expect("could not find expected instruction");
+                    self.blocks[bi].sections[si].ir_regs.resize(ii + 1, vec![]);
+                    self.blocks[bi].sections[si].ir_regs[ii] =
+                        allocs.iter().map(|v| rg2x(v.as_reg().unwrap())).collect();
+                }
             }
-            println!("after: {inst_data:#?}");
         }
     }
 
-    pub fn patch_returns(&mut self) {
-        // Returns previously got a use register that is an 'any'... we patch in a move here
-        // in the the register allocator should do this.
-
+    pub fn lower_second(&mut self) {
         let new_op = InstructionData::new;
         use crate::codegen::{Op, Operand, Width};
+        let dfg = &self.fun.dfg;
+        let type_of = |v: &ir::Value| dfg.value_type(*v);
+        let _types_of = |v: &[ir::Value]| v.iter().map(|z| dfg.value_type(*z)).collect::<Vec<_>>();
 
         for b in self.blocks.iter_mut() {
             for s in b.sections.iter_mut() {
-                if let Some(last) = s.lir_inst.last() {
-                    let instdata = &self.instdata[last.0];
-                    let new_id = Inst(self.instdata.len());
-                    if instdata.operation == crate::codegen::Op::Return {
-                        info!("Patching {instdata:?}");
-                        info!("Patching {:?}", s.lir_inst);
+                if s.is_lowered() {
+                    continue;
+                }
+                let mut lirs = vec![];
+                for (ii, inst) in s.ir_inst.iter().enumerate() {
+                    let instdata = self.fun.dfg.insts[*inst];
+                    let def_ir = self.fun.dfg.inst_results(*inst);
+                    let use_ir = instdata.arguments(&self.fun.dfg.value_lists);
+                    let typevar_operand = instdata.typevar_operand(&dfg.value_lists);
+                    match instdata {
+                        IrInstructionData::MultiAry { opcode, args } => match opcode {
+                            ir::Opcode::Return => {
+                                if args.len(&self.fun.dfg.value_lists) != 1 {
+                                    todo!()
+                                }
 
-                        self.instdata.push(
-                            new_op(Op::Mov(Width::W64))
-                                .with_use(&[instdata.use_operands[0]])
-                                .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
-                        );
-
-                        self.instdata[last.0].use_operands.clear(); // clear the use for return.
-                                                                    // insert the new move.
-                        s.lir_inst.insert(s.lir_inst.len() - 1, new_id);
-
-                        info!("Patching {:?}", self.instdata);
-                        info!("      {:?}", s.lir_inst);
+                                lirs.push(
+                                    new_op(Op::Mov(Width::W64))
+                                        .with_use(&[Operand::Reg(s.ir_regs[ii][0])])
+                                        .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
+                                );
+                                lirs.push(new_op(Op::Return));
+                            }
+                            _ => todo!(
+                                "unimplemented opcode: {:?} in {:?}, of {:?}",
+                                opcode,
+                                inst,
+                                self.fun.name
+                            ),
+                        },
+                        _ => todo!(
+                            "unimplemented structure: {:?} in {:?}, of {:?}",
+                            instdata,
+                            inst,
+                            self.fun.name
+                        ),
                     }
+                }
+                // Use the lirs, actually put instruction indices.
+                for l in lirs {
+                    let new_id = Inst(self.instdata.len());
+                    self.instdata.push(l);
+                    s.lir_inst.push(new_id);
+                    s.is_lowered = true;
                 }
             }
         }
     }
+
     pub fn patch_operations(&mut self) {
         let new_op = InstructionData::new;
         use crate::codegen::{Op, Operand, Width};
@@ -594,11 +657,27 @@ use regalloc2::{InstRange, PRegSet, RegClass, VReg};
 use std::collections::HashMap;
 
 #[derive(Debug)]
+enum LirOrIrInst {
+    Lir(Inst),
+    Ir(IrInst),
+}
+impl From<Inst> for LirOrIrInst {
+    fn from(v: Inst) -> LirOrIrInst {
+        LirOrIrInst::Lir(v)
+    }
+}
+impl From<IrInst> for LirOrIrInst {
+    fn from(v: IrInst) -> LirOrIrInst {
+        LirOrIrInst::Ir(v)
+    }
+}
+
+#[derive(Debug)]
 struct InstInfo {
     is_ret: bool,
     is_branch: bool,
     operands: Vec<RegOperand>,
-    inst: Inst,
+    inst: LirOrIrInst,
 }
 
 #[derive(Debug)]
@@ -641,85 +720,151 @@ impl RegWrapper {
             let mut last_inst = None;
 
             for s in b.sections.iter() {
-                for inst in s.lir_inst.iter() {
-                    let data = lirfun.inst_data(*inst).expect("ill formed function");
-                    let mut operands = vec![];
-                    for z in data.use_operands.iter() {
-                        match z {
-                            LirOperand::Virtual(v) => {
-                                // Should do something here with retrieving the constraints of the opcode
-                                let regtype = RegClass::Int;
-                                let vreg = value_info
-                                    .entry(*v)
-                                    .or_insert_with(|| VReg::new(v.as_u32() as usize, regtype));
-                                let operand = RegOperand::new(
-                                    *vreg,
-                                    regalloc2::OperandConstraint::Any,
-                                    regalloc2::OperandKind::Use,
-                                    regalloc2::OperandPos::Early,
-                                );
-                                operands.push(operand);
-                            }
-                            LirOperand::Machine(r) => {
-                                match r {
-                                    crate::codegen::Operand::Immediate(_) => {
-                                        // Not actually an operand for register allocation.
-                                    }
-                                    crate::codegen::Operand::Reg(r) => {
-                                        todo!("{r:?}");
+                if s.is_lowered() {
+                    // if it is lowered, we operate on the LIR.
+                    for inst in s.lir_inst.iter() {
+                        let data = lirfun.inst_data(*inst).expect("ill formed function");
+                        let mut operands = vec![];
+                        for z in data.use_operands.iter() {
+                            match z {
+                                LirOperand::Virtual(v) => {
+                                    // Should do something here with retrieving the constraints of the opcode
+                                    let regtype = RegClass::Int;
+                                    let vreg = value_info
+                                        .entry(*v)
+                                        .or_insert_with(|| VReg::new(v.as_u32() as usize, regtype));
+                                    let operand = RegOperand::new(
+                                        *vreg,
+                                        regalloc2::OperandConstraint::Any,
+                                        regalloc2::OperandKind::Use,
+                                        regalloc2::OperandPos::Early,
+                                    );
+                                    operands.push(operand);
+                                }
+                                LirOperand::Machine(r) => {
+                                    match r {
+                                        crate::codegen::Operand::Immediate(_) => {
+                                            // Not actually an operand for register allocation.
+                                        }
+                                        crate::codegen::Operand::Reg(r) => {
+                                            todo!("{r:?}");
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    for z in data.def_operands.iter() {
-                        match z {
-                            LirOperand::Virtual(v) => {
-                                // Should do something here with retrieving the constraints of the opcode
-                                let regtype = RegClass::Int;
-                                let vreg = value_info
-                                    .entry(*v)
-                                    .or_insert_with(|| VReg::new(v.as_u32() as usize, regtype));
-                                let operand = RegOperand::new(
-                                    *vreg,
-                                    regalloc2::OperandConstraint::Any,
-                                    regalloc2::OperandKind::Def,
-                                    regalloc2::OperandPos::Late,
-                                );
-                                operands.push(operand);
-                            }
-                            LirOperand::Machine(r) => {
-                                match r {
-                                    crate::codegen::Operand::Immediate(_) => {
-                                        // Not actually an operand for register allocation.
-                                    }
-                                    crate::codegen::Operand::Reg(r) => {
-                                        todo!("{r:?} for {data:?}");
+                        for z in data.def_operands.iter() {
+                            match z {
+                                LirOperand::Virtual(v) => {
+                                    // Should do something here with retrieving the constraints of the opcode
+                                    let regtype = RegClass::Int;
+                                    let vreg = value_info
+                                        .entry(*v)
+                                        .or_insert_with(|| VReg::new(v.as_u32() as usize, regtype));
+                                    let operand = RegOperand::new(
+                                        *vreg,
+                                        regalloc2::OperandConstraint::Any,
+                                        regalloc2::OperandKind::Def,
+                                        regalloc2::OperandPos::Late,
+                                    );
+                                    operands.push(operand);
+                                }
+                                LirOperand::Machine(r) => {
+                                    match r {
+                                        crate::codegen::Operand::Immediate(_) => {
+                                            // Not actually an operand for register allocation.
+                                        }
+                                        crate::codegen::Operand::Reg(r) => {
+                                            todo!("{r:?} for {data:?}");
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
 
-                    let reg_inst = RegInst::new(inst_info.len());
-                    if first_inst.is_none() {
-                        first_inst = Some(reg_inst);
-                    }
-                    if first_inst_in_fun.is_none() {
-                        first_inst_in_fun = Some(reg_inst);
-                    }
-                    last_inst = Some(reg_inst);
-                    println!("assigning {last_inst:?}");
+                        let reg_inst = RegInst::new(inst_info.len());
+                        if first_inst.is_none() {
+                            first_inst = Some(reg_inst);
+                        }
+                        if first_inst_in_fun.is_none() {
+                            first_inst_in_fun = Some(reg_inst);
+                        }
+                        last_inst = Some(reg_inst);
+                        println!("assigning {last_inst:?}");
 
-                    let is_ret = data.operation.is_return();
-                    let is_branch = data.operation.is_branch();
-                    let info = InstInfo {
-                        is_ret,
-                        is_branch,
-                        operands,
-                        inst: *inst,
-                    };
-                    inst_info.insert(reg_inst, info);
+                        let is_ret = data.operation.is_return();
+                        let is_branch = data.operation.is_branch();
+                        let info = InstInfo {
+                            is_ret,
+                            is_branch,
+                            operands,
+                            inst: (*inst).into(),
+                        };
+                        inst_info.insert(reg_inst, info);
+                    }
+                } else {
+                    // if it is not lowered, we operate on the IR.
+                    for irinst in s.ir_inst.iter() {
+                        let instdata = fun.dfg.insts[*irinst];
+
+                        let mut operands = vec![];
+
+                        // Input arguments to instruction.
+                        let arguments = instdata.arguments(&fun.dfg.value_lists);
+                        // println!("Adding arguments to ir inst: {arguments:?} {irinst:?}");
+                        for v in arguments {
+                            let valuetype = fun.dfg.value_type(*v);
+                            let regtype = if valuetype.is_int() {
+                                RegClass::Int
+                            } else {
+                                RegClass::Float
+                            };
+                            let operand = RegOperand::new(
+                                VReg::new(v.as_u32() as usize, regtype),
+                                regalloc2::OperandConstraint::Any,
+                                regalloc2::OperandKind::Use,
+                                regalloc2::OperandPos::Early,
+                            );
+                            operands.push(operand);
+                        }
+
+                        // Results of instruction.
+                        for r in fun.dfg.inst_results(*irinst) {
+                            let valuetype = fun.dfg.value_type(*r);
+                            let regtype = if valuetype.is_int() {
+                                RegClass::Int
+                            } else {
+                                RegClass::Float
+                            };
+                            let operand = RegOperand::new(
+                                VReg::new(r.as_u32() as usize, regtype),
+                                regalloc2::OperandConstraint::Any,
+                                regalloc2::OperandKind::Def,
+                                regalloc2::OperandPos::Late,
+                            );
+                            operands.push(operand);
+                        }
+
+                        let is_ret = instdata.opcode().is_return();
+                        let is_branch = instdata.opcode().is_branch();
+                        let info = InstInfo {
+                            is_ret,
+                            is_branch,
+                            operands,
+                            inst: (*irinst).into(),
+                        };
+                        println!(" irinst {irinst:?} with {info:?}");
+                        let reg_inst = RegInst::new(inst_info.len());
+                        if first_inst.is_none() {
+                            first_inst = Some(reg_inst);
+                        }
+                        if first_inst_in_fun.is_none() {
+                            first_inst_in_fun = Some(reg_inst);
+                        }
+                        last_inst = Some(reg_inst);
+
+                        inst_info.insert(reg_inst, info);
+                    }
                 }
             }
 

@@ -109,14 +109,15 @@ impl X86Isa {
 
         let mut lirfun = crate::lir::Function::from_ir(&func);
         lirfun.lirify();
-        lirfun.lower();
+        lirfun.lower_first();
         let reg_wrapper = lirfun.reg_wrapper();
         println!("{lirfun:#?}");
         let reg_outputs =
             grus_regalloc::run(&reg_wrapper, &grus_regalloc::simple_int_machine(4, 0))?;
 
         lirfun.apply_regalloc(&reg_wrapper, &reg_outputs);
-        lirfun.patch_returns();
+        lirfun.lower_second();
+        // lirfun.patch_returns();
         lirfun.patch_operations();
 
         buffer = lirfun.assemble();
