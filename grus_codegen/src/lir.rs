@@ -56,10 +56,13 @@ use crate::codegen as cg;
     Stages:
         - Function::new(), just copies the cranelift function.
         - lirify; creates lir blocks, copies each Cranelift Instruction into its own section.
-        - Lower; Creates hw instructions for each section, without register allocations.
-        - (register allocation?)
+        - lower_first; Creates hw instructions for most section, without register allocations.
+        - register allocation:
+            - For already lowered instructions, virtual operands are substituted with registers.
+            - For non lowered ir, registers are stored for second lower pass.
+        - lower second; now that registers are available for all instructions remaining ir is lowered.
         - Can create bytecode for sections now.
-        - Something with jumps and offsets.
+        - Something with jumps and offsets?
 */
 use cranelift_codegen::isa::CallConv;
 use log::*;
@@ -346,19 +349,7 @@ impl Function {
                                 if args.len(&self.fun.dfg.value_lists) != 1 {
                                     todo!()
                                 }
-                                /*
-                                if true {
-                                    lirs.push(
-                                        new_op(Op::Return).with_use(&[use_ir[0]]), // .with_def(&[Operand::Reg(cg::Reg::EAX)]),
-                                    );
-                                } else {
-                                    lirs.push(
-                                        new_op(Op::Mov(Width::W64))
-                                            .with_use(&[use_ir[0]])
-                                            .with_def(&[Operand::Reg(cg::Reg::EAX)]),
-                                    );
-                                    lirs.push(new_op(Op::Return));
-                                }*/
+                                // Lowered in second pass.
                             }
                             _ => todo!(
                                 "unimplemented opcode: {:?} in {:?}, of {:?}",
