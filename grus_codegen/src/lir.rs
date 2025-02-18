@@ -4,6 +4,9 @@ use cranelift_codegen::ir::Function as CraneliftIrFunction;
 use cranelift_codegen::ir::Inst as IrInst;
 use cranelift_codegen::ir::InstructionData as IrInstructionData;
 use cranelift_codegen::ir::{self, Value};
+
+use crate::codegen as cg;
+
 /**
     A low(er) level intermediate representation.
 */
@@ -69,8 +72,6 @@ use regalloc2::Operand as RegOperand;
 use regalloc2::{InstRange, PRegSet, RegClass, VReg};
 */
 
-use crate::codegen as cg;
-
 #[derive(Copy, Clone, Debug)]
 struct BlockId(usize);
 impl BlockId {
@@ -86,28 +87,28 @@ use Inst as LirInst;
 #[derive(Copy, Clone, Debug)]
 pub enum LirOperand {
     Virtual(Value),
-    Machine(crate::codegen::Operand),
+    Machine(cg::Operand),
 }
 impl From<Value> for LirOperand {
     fn from(v: Value) -> LirOperand {
         LirOperand::Virtual(v)
     }
 }
-impl From<crate::codegen::Operand> for LirOperand {
-    fn from(v: crate::codegen::Operand) -> LirOperand {
+impl From<cg::Operand> for LirOperand {
+    fn from(v: cg::Operand) -> LirOperand {
         LirOperand::Machine(v)
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct InstructionData {
-    pub operation: crate::codegen::Op,
+    pub operation: cg::Op,
     // Should we have def_operand and use_operand?
     pub def_operands: Vec<LirOperand>,
     pub use_operands: Vec<LirOperand>,
 }
 impl InstructionData {
-    pub fn new(operation: crate::codegen::Op) -> Self {
+    pub fn new(operation: cg::Op) -> Self {
         Self {
             operation,
             def_operands: vec![],
@@ -137,8 +138,8 @@ impl InstructionData {
                 .iter()
                 .any(|v| matches!(v, LirOperand::Virtual(_)))
     }
-    pub fn assemble(&self) -> Result<Vec<u8>, crate::codegen::CodegenError> {
-        let mut opv = crate::codegen::OperandVec::new();
+    pub fn assemble(&self) -> Result<Vec<u8>, cg::CodegenError> {
+        let mut opv = cg::OperandVec::new();
         for cont in [&self.def_operands, &self.use_operands] {
             for v in cont.iter() {
                 match v {
@@ -149,7 +150,7 @@ impl InstructionData {
                 }
             }
         }
-        let inst = crate::codegen::Instruction {
+        let inst = cg::Instruction {
             op: self.operation,
             operands: opv,
         };
@@ -161,7 +162,7 @@ impl InstructionData {
 struct Section {
     lir_inst: Vec<LirInst>,
     ir_inst: Vec<IrInst>,
-    ir_regs: Vec<Vec<crate::codegen::Reg>>,
+    ir_regs: Vec<Vec<cg::Reg>>,
     is_lowered: bool,
 }
 impl Section {
@@ -310,7 +311,7 @@ impl Function {
     /// Lower IR instructions to partial machine instructions
     pub fn lower_first(&mut self) {
         let new_op = InstructionData::new;
-        use crate::codegen::{Op, Operand, Width};
+        use cg::{Op, Operand, Width};
         let dfg = &self.fun.dfg;
         let type_of = |v: &ir::Value| dfg.value_type(*v);
         let _types_of = |v: &[ir::Value]| v.iter().map(|z| dfg.value_type(*z)).collect::<Vec<_>>();
@@ -348,13 +349,13 @@ impl Function {
                                 /*
                                 if true {
                                     lirs.push(
-                                        new_op(Op::Return).with_use(&[use_ir[0]]), // .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
+                                        new_op(Op::Return).with_use(&[use_ir[0]]), // .with_def(&[Operand::Reg(cg::Reg::EAX)]),
                                     );
                                 } else {
                                     lirs.push(
                                         new_op(Op::Mov(Width::W64))
                                             .with_use(&[use_ir[0]])
-                                            .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
+                                            .with_def(&[Operand::Reg(cg::Reg::EAX)]),
                                     );
                                     lirs.push(new_op(Op::Return));
                                 }*/
@@ -463,7 +464,19 @@ impl Function {
     }
 
     pub fn apply_regalloc(&mut self, wrapper: &RegWrapper, regs: &RegOutput) {
-        use crate::codegen::Reg;
+        use cg::Reg;
+
+        // Call convention is kinda hardcoded on the regalloc side...
+        // reg0 is arg 0; EDI, Diane's
+        // reg1 is arg 1; ESI, Silk
+        // reg2 is arg 2; EDX, Dress
+        // reg3 is arg 3; ECX, Costs
+        // reg4 is arg 4; r8?, 8
+        // reg5 is arg 5; r9?, 9$
+
+        // And regalloc uses 'n' registers from 0..n.
+        // So we need to map those to something.
+
         let regmap = [
             Reg::EDI, // PReg(0),
             Reg::ESI, // PReg(1),
@@ -492,8 +505,8 @@ impl Function {
                     for cont in [&mut inst_data.use_operands, &mut inst_data.def_operands] {
                         for z in cont.iter_mut() {
                             match z {
-                                LirOperand::Virtual(v) => {
-                                    *z = LirOperand::Machine(crate::codegen::Operand::Reg(rg2x(
+                                LirOperand::Virtual(_v) => {
+                                    *z = LirOperand::Machine(cg::Operand::Reg(rg2x(
                                         use_allocs[index].as_reg().unwrap(),
                                     )));
                                     index += 1;
@@ -534,10 +547,7 @@ impl Function {
 
     pub fn lower_second(&mut self) {
         let new_op = InstructionData::new;
-        use crate::codegen::{Op, Operand, Width};
-        let dfg = &self.fun.dfg;
-        let type_of = |v: &ir::Value| dfg.value_type(*v);
-        let _types_of = |v: &[ir::Value]| v.iter().map(|z| dfg.value_type(*z)).collect::<Vec<_>>();
+        use cg::{Op, Operand, Width};
 
         for b in self.blocks.iter_mut() {
             for s in b.sections.iter_mut() {
@@ -547,9 +557,6 @@ impl Function {
                 let mut lirs = vec![];
                 for (ii, inst) in s.ir_inst.iter().enumerate() {
                     let instdata = self.fun.dfg.insts[*inst];
-                    let def_ir = self.fun.dfg.inst_results(*inst);
-                    let use_ir = instdata.arguments(&self.fun.dfg.value_lists);
-                    let typevar_operand = instdata.typevar_operand(&dfg.value_lists);
                     match instdata {
                         IrInstructionData::MultiAry { opcode, args } => match opcode {
                             ir::Opcode::Return => {
@@ -560,7 +567,7 @@ impl Function {
                                 lirs.push(
                                     new_op(Op::Mov(Width::W64))
                                         .with_use(&[Operand::Reg(s.ir_regs[ii][0])])
-                                        .with_def(&[Operand::Reg(crate::codegen::Reg::EAX)]),
+                                        .with_def(&[Operand::Reg(cg::Reg::EAX)]),
                                 );
                                 lirs.push(new_op(Op::Return));
                             }
@@ -592,21 +599,18 @@ impl Function {
 
     pub fn patch_operations(&mut self) {
         let new_op = InstructionData::new;
-        use crate::codegen::{Op, Operand, Width};
+        use cg::{Op, Operand, Width};
 
         for b in self.blocks.iter_mut() {
             for s in b.sections.iter_mut() {
                 let mut new_inst = vec![];
                 for (si, sint) in s.lir_inst.iter().enumerate() {
-                    let new_id = Inst(self.instdata.len());
                     let instdata = &mut self.instdata[sint.0];
                     match instdata.operation {
-                        crate::codegen::Op::IAdd(_)
-                        | crate::codegen::Op::ISub(_)
-                        | crate::codegen::Op::IMul(_) => {
+                        cg::Op::IAdd(_) | cg::Op::ISub(_) | cg::Op::IMul(_) => {
                             let dest = instdata.def_operands[0];
                             let src0 = instdata.use_operands[0];
-                            let src1 = instdata.use_operands[1];
+                            // let src1 = instdata.use_operands[1];
 
                             // Insert a new move that moves src0 into dest.
                             instdata.use_operands.remove(0);
@@ -743,10 +747,10 @@ impl RegWrapper {
                                 }
                                 LirOperand::Machine(r) => {
                                     match r {
-                                        crate::codegen::Operand::Immediate(_) => {
+                                        cg::Operand::Immediate(_) => {
                                             // Not actually an operand for register allocation.
                                         }
-                                        crate::codegen::Operand::Reg(r) => {
+                                        cg::Operand::Reg(r) => {
                                             todo!("{r:?}");
                                         }
                                     }
@@ -771,10 +775,10 @@ impl RegWrapper {
                                 }
                                 LirOperand::Machine(r) => {
                                     match r {
-                                        crate::codegen::Operand::Immediate(_) => {
+                                        cg::Operand::Immediate(_) => {
                                             // Not actually an operand for register allocation.
                                         }
-                                        crate::codegen::Operand::Reg(r) => {
+                                        cg::Operand::Reg(r) => {
                                             todo!("{r:?} for {data:?}");
                                         }
                                     }
