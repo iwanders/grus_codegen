@@ -422,6 +422,14 @@ impl Function {
                                 self.fun.name
                             ),
                         },
+                        IrInstructionData::Brif {
+                            opcode,
+                            arg,
+                            blocks,
+                        } => {
+                            debug!("Brif : {arg:#?}  {blocks:#?}");
+                        }
+
                         _ => todo!(
                             "unimplemented structure: {:?} in {:?}, of {:?}",
                             instdata,
@@ -488,6 +496,7 @@ impl Function {
                     if !inst_data.has_virtuals() {
                         continue;
                     }
+                    println!("@ {reginst:?} inst_data: {inst_data:#?}");
                     let allocs_args = regs.inst_allocs(*reginst);
                     let use_allocs = &allocs_args[0..];
                     println!("use_allocs.len: {}", use_allocs.len());
@@ -512,6 +521,7 @@ impl Function {
                     }
                 }
                 LirOrIrInst::Ir(inst) => {
+                    println!("reginst: {reginst:?}");
                     let allocs_args = regs.inst_allocs(*reginst);
                     let allocs = &allocs_args[0..];
 
@@ -708,8 +718,11 @@ impl RegWrapper {
 
         let mut first_inst_in_fun = None;
 
+        let last_block = lirfun.blocks.last().unwrap().id.0;
         for b in lirfun.blocks.iter() {
             let regblock = RegBlock::new(b.id.0);
+            // let is_entry_block = regblock == entry_block;
+            let is_last_block = last_block == b.id.0;
 
             let mut first_inst = None;
             let mut last_inst = None;
@@ -865,7 +878,12 @@ impl RegWrapper {
 
             // WHY!?
             error!("seriously wonky +1 here to ensure register allocation works");
-            let last_plus_one = last_inst.map(|v| RegInst::new(v.0 as usize + 1));
+            // Does it relate to
+            // https://github.com/bytecodealliance/regalloc2/blob/925df1b4674435a9322e21912926a68749517861/src/lib.rs#L1514-L1522
+            let last_plus_one =
+                last_inst.map(|v| RegInst::new(v.0 as usize + if !is_last_block { 1 } else { 0 }));
+            // let last_plus_one = last_inst.map(|v| RegInst::new(v.0 as usize + 1));
+
             let range = InstRange::new(
                 first_inst.expect("block should have instruction"),
                 last_plus_one.expect("block should have instruction"),

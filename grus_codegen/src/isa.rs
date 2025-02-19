@@ -81,6 +81,8 @@ impl X86Isa {
         println!("{lirfun:#?}");
         let reg_outputs =
             grus_regalloc::run(&reg_wrapper, &grus_regalloc::simple_int_machine(4, 0))?;
+        // let reg_outputs =
+        // regalloc2::run(&reg_wrapper, &grus_regalloc::simple_int_machine(4, 0), &Default::default())?;
 
         lirfun.apply_regalloc(&reg_wrapper, &reg_outputs);
         lirfun.lower_second();
