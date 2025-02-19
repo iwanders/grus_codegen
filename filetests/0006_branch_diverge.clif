@@ -12,7 +12,9 @@ block2:
     return v5
 
 block5:
-    v11 = iadd_imm v1, 1
+    v6 = iconst.i64 1
+    ;v11 = iadd_imm v1, 1
+    v11 = iadd v6, v1
     return v11
 
 }
