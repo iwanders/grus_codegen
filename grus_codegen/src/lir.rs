@@ -880,9 +880,8 @@ impl RegWrapper {
             error!("seriously wonky +1 here to ensure register allocation works");
             // Does it relate to
             // https://github.com/bytecodealliance/regalloc2/blob/925df1b4674435a9322e21912926a68749517861/src/lib.rs#L1514-L1522
-            let last_plus_one =
-                last_inst.map(|v| RegInst::new(v.0 as usize + if !is_last_block { 1 } else { 0 }));
-            // let last_plus_one = last_inst.map(|v| RegInst::new(v.0 as usize + 1));
+            // let last_plus_one = last_inst.map(|v| RegInst::new(v.0 as usize + if !is_last_block {1}else{0}));
+            let last_plus_one = last_inst.map(|v| RegInst::new(v.0 as usize + 1));
 
             let range = InstRange::new(
                 first_inst.expect("block should have instruction"),
