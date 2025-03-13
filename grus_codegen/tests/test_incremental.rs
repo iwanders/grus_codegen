@@ -7,6 +7,9 @@ fn test_incremental() -> Result<(), anyhow::Error> {
     let filenames = [
         "0001_constant_i64.clif",
         "0002_arithmetic_add_i64_i32_i16_i8.clif",
+        "0003_more_instructions.clif",
+        "0004_arithmetic_sub_i64_i32_i16_i8.clif",
+        "0005_arithmetic_mul_i64_i32_i16_i8.clif",
     ];
 
     for f in filenames {
