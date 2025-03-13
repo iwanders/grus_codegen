@@ -305,6 +305,7 @@ mod winged {
         // Do a linear pass to populate the variable states.
         let entry_b = fun.entry_block();
         // let mut first_instruction = None;
+        println!("block ins: {:?}", fun.block_insns(entry_b));
         let insn = fun.block_insns(entry_b).first();
         let first_instruction = Some(insn);
         for entry_vreg in fun.block_params(entry_b) {
@@ -334,38 +335,46 @@ mod winged {
             }
         }
 
-        for insn in fun.block_insns(entry_b).iter() {
-            println!("Instzzzz: {insn:?}");
-            let ops = fun.inst_operands(insn);
-            let is_early_first_instruction = Some(insn) == first_instruction;
-            for stage in [regalloc2::OperandPos::Early, regalloc2::OperandPos::Late] {
-                for op in ops {
-                    if op.pos() != stage {
-                        continue;
-                    }
-                    println!("Op: {op:?}, pos: {:?}", op.pos());
-                    if is_early_first_instruction
-                        && op.kind() == OperandKind::Def
-                        && op.pos() == regalloc2::OperandPos::Early
-                    {
-                        continue;
-                    }
+        // Clunky; iterate over the first blocks for now.
+        let start_entry = vec![entry_b];
+        let block_ids: Vec<_> = start_entry
+            .iter()
+            .chain(fun.block_succs(entry_b).iter())
+            .collect();
+        for block in block_ids.iter() {
+            for insn in fun.block_insns(**block).iter() {
+                println!("Instzzzz: {insn:?}");
+                let ops = fun.inst_operands(insn);
+                let is_early_first_instruction = Some(insn) == first_instruction;
+                for stage in [regalloc2::OperandPos::Early, regalloc2::OperandPos::Late] {
+                    for op in ops {
+                        if op.pos() != stage {
+                            continue;
+                        }
+                        println!("Op: {op:?}, pos: {:?}", op.pos());
+                        if is_early_first_instruction
+                            && op.kind() == OperandKind::Def
+                            && op.pos() == regalloc2::OperandPos::Early
+                        {
+                            continue;
+                        }
 
-                    if op.kind() == OperandKind::Def {
-                        varmap.insert(
-                            op.vreg(),
-                            VariableState {
-                                duration: insn..=insn,
-                                reads: vec![],
-                            },
-                        );
-                    } else if op.kind() == OperandKind::Use {
-                        // it is used, so it MUST be present in the map.
-                        let entry = varmap.get_mut(&op.vreg()).unwrap_or_else(|| {
-                            panic!("encountered vreg {op:?} never seen before at {insn:?}")
-                        });
-                        entry.duration = *entry.duration.start()..=insn;
-                        entry.reads.push(insn);
+                        if op.kind() == OperandKind::Def {
+                            varmap.insert(
+                                op.vreg(),
+                                VariableState {
+                                    duration: insn..=insn,
+                                    reads: vec![],
+                                },
+                            );
+                        } else if op.kind() == OperandKind::Use {
+                            // it is used, so it MUST be present in the map.
+                            let entry = varmap.get_mut(&op.vreg()).unwrap_or_else(|| {
+                                panic!("encountered vreg {op:?} never seen before at {insn:?}")
+                            });
+                            entry.duration = *entry.duration.start()..=insn;
+                            entry.reads.push(insn);
+                        }
                     }
                 }
             }
@@ -410,46 +419,47 @@ mod winged {
             println!("zzzxxx insn: {insn:?}");
         }
 
-        for insn in fun.block_insns(entry_b).iter() {
-            let ops = fun.inst_operands(insn);
-            let is_first_instruction = Some(insn) == first_instruction;
-            // let is_first_instruction = false;
+        for block in block_ids.iter() {
+            for insn in fun.block_insns(**block).iter() {
+                let ops = fun.inst_operands(insn);
+                let is_first_instruction = Some(insn) == first_instruction;
+                // let is_first_instruction = false;
 
-            println!("ops: {ops:?} insn: {insn:?}");
-            for op in ops {
-                if op.kind() == OperandKind::Def {
-                    if is_first_instruction && op.pos() == regalloc2::OperandPos::Early {
-                        continue;
-                    }
-                    match op.constraint() {
-                        OperandConstraint::FixedReg(preg) => {
-                            if machine.is_empty(preg) {
-                                machine.assign(preg, op.vreg());
-                                tracker.add_allocation(insn, Allocation::reg(preg));
-                            } else {
-                                todo!("got a def on {preg:?} but that is occupied")
+                println!("ops: {ops:?} insn: {insn:?}");
+                for op in ops {
+                    if op.kind() == OperandKind::Def {
+                        if is_first_instruction && op.pos() == regalloc2::OperandPos::Early {
+                            continue;
+                        }
+                        match op.constraint() {
+                            OperandConstraint::FixedReg(preg) => {
+                                if machine.is_empty(preg) {
+                                    machine.assign(preg, op.vreg());
+                                    tracker.add_allocation(insn, Allocation::reg(preg));
+                                } else {
+                                    todo!("got a def on {preg:?} but that is occupied")
+                                }
                             }
+                            OperandConstraint::Any => {
+                                // Pick any free register.
+                                let alloc = machine.def_register(op)?;
+                                tracker.add_allocation(insn, alloc);
+                            }
+                            _ => todo!("operand constraint: {:?}", op.constraint()),
                         }
-                        OperandConstraint::Any => {
-                            // Pick any free register.
-                            let alloc = machine.def_register(op)?;
-                            tracker.add_allocation(insn, alloc);
+                    } else if op.kind() == OperandKind::Use {
+                        if machine.in_register(op.vreg()).is_none() {
+                            todo!("need to move {op:?} value into a register")
                         }
-                        _ => todo!("operand constraint: {:?}", op.constraint()),
+                        let alloc = machine.in_register(op.vreg()).unwrap();
+                        tracker.add_allocation(insn, Allocation::reg(alloc));
                     }
-                } else if op.kind() == OperandKind::Use {
-                    if machine.in_register(op.vreg()).is_none() {
-                        todo!("need to move {op:?} value into a register")
-                    }
-                    let alloc = machine.in_register(op.vreg()).unwrap();
-                    tracker.add_allocation(insn, Allocation::reg(alloc));
                 }
+
+                // End of instruction, evict anything that is no longer necessary.
+                machine.evict_after_inst(insn, &varmap);
             }
-
-            // End of instruction, evict anything that is no longer necessary.
-            machine.evict_after_inst(insn, &varmap);
         }
-
         Ok(regalloc2::Output {
             allocs: tracker.allocs(),
             inst_alloc_offsets: tracker.inst_alloc_offsets(),
