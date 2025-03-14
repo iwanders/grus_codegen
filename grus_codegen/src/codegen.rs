@@ -24,13 +24,33 @@ pub enum CodegenError {
     InvalidOperandCount { got: usize, expected: OperandRange },
 }
 
+/// x86 instructions
+///
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub enum Op {
+    /// MOV - Move
+    ///
+    /// MOV r16,r/m16   MOV r32,r/m32  MOV r64,r/m64
     Mov(Width),
+    /// ADD - Add
+    ///
+    /// ADD r16, r/m16   ADD r32, r/m32  ADD r64, r/m64
     IAdd(Width),
+    /// SUB - Subtract
+    ///
+    /// SUB r16, r/m16   SUB r32, r/m32  SUB r64, r/m64
     ISub(Width),
+    /// IMUL - Signed Multiply
+    ///
+    /// IMUL r16,r/m16   IMUL r32,r/m32  IMUL r64,r/m64
     IMul(Width),
+    /// RET - Return from procedure
     Return,
+    /// TEST - Logical Compare
+    ///
+    /// TEST r/m16, imm16   TEST r/m32, imm32   TEST r/m64, imm64
+    /// TEST r/m16, r16   TEST r/m32, r32   TEST r/m64, r64
+    Test,
 }
 
 impl Op {
@@ -41,6 +61,7 @@ impl Op {
             Op::ISub(_) => 2..=2,
             Op::IMul(_) => 2..=2, // heh, technically 1..=3... with 3 only with intermediate, 1 for eax
             Op::Return => 0..=0,
+            Op::Test => 2..=2,
         }
     }
     pub fn is_return(&self) -> bool {
@@ -306,6 +327,9 @@ impl Instruction {
             Op::Return => {
                 const RETN: u8 = 0xC3;
                 v.push(RETN);
+            }
+            Op::Test => {
+                todo!()
             }
         }
         Ok(v)

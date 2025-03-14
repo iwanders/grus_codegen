@@ -427,6 +427,10 @@ impl Function {
                             arg,
                             blocks,
                         } => {
+                            // Conditional branch when cond (arg) is non-zero
+                            // take 'then' (first block) when c != 0 and the 'else' branch otherwise.
+                            // In the ideal case, we'd have the register allocator shuffle the values in the two
+                            // blocks we need to handle the if statement.
                             debug!("Brif : {arg:#?}  {blocks:#?}");
                         }
 
