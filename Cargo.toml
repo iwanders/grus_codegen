@@ -3,18 +3,12 @@ resolver = "2"
 
 package.edition = "2021"
 
-members = [
-    "grus_codegen",
-    "grus_module",
-    "grus_regalloc",
-]
+members = ["grus_codegen", "grus_module", "grus_regalloc"]
 
 [workspace.dependencies]
 grus_codegen = { path = "grus_codegen", default-features = false }
 grus_module = { path = "grus_module", default-features = false }
-grus_testing = { path = "grus_testing", default-features = false }
 grus_regalloc = { path = "grus_regalloc", default-features = false }
-
 
 
 #cranelift-codegen = {path="../../../bytecodealliance/wasmtime/cranelift/codegen", features=["x86", "arm64"]}
@@ -25,8 +19,7 @@ grus_regalloc = { path = "grus_regalloc", default-features = false }
 #cranelift-object = {path="../../../bytecodealliance/wasmtime/cranelift/object"}
 
 
-
-target-lexicon = {version="0.13.1"}
+target-lexicon = { version = "0.13.1" }
 
 
 cranelift = "0.116.1"
@@ -40,7 +33,7 @@ thiserror = "2"
 
 object = "0.36.7"
 
-cranelift-codegen = {version="0.116.1", features=["x86", "arm64"]}
+cranelift-codegen = { version = "0.116.1", features = ["x86", "arm64"] }
 
 clap = { version = "4.5.27", features = ["derive"] }
 anyhow = "1.0.95"

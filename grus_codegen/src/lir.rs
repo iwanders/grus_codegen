@@ -432,6 +432,12 @@ impl Function {
                             // In the ideal case, we'd have the register allocator shuffle the values in the two
                             // blocks we need to handle the if statement.
                             debug!("Brif : {arg:#?}  {blocks:#?}");
+                            // Model the branch as an instruction that reads one value... ignoring the fact that it
+                            // writes values used by the branch for now.
+                            lirs.push(new_op(Op::Test).with_use::<LirOperand>(&[
+                                use_ir[0].into(),
+                                LirOperand::Machine(Operand::Immediate(0)).into(),
+                            ]));
                         }
 
                         _ => todo!(
@@ -583,6 +589,15 @@ impl Function {
                                 self.fun.name
                             ),
                         },
+                        IrInstructionData::Brif {
+                            opcode,
+                            arg,
+                            blocks,
+                        } => {
+                            error!("ir_regs: {:#?}", s.ir_regs);
+
+                            todo!();
+                        }
                         _ => todo!(
                             "unimplemented structure: {:?} in {:?}, of {:?}",
                             instdata,
@@ -726,7 +741,7 @@ impl RegWrapper {
         for b in lirfun.blocks.iter() {
             let regblock = RegBlock::new(b.id.0);
             // let is_entry_block = regblock == entry_block;
-            let is_last_block = last_block == b.id.0;
+            //let is_last_block = last_block == b.id.0;
 
             let mut first_inst = None;
             let mut last_inst = None;
