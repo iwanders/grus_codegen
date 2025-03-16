@@ -427,7 +427,7 @@ impl Function {
                             ),
                         },
                         IrInstructionData::Brif {
-                            opcode,
+                            opcode: _,
                             arg,
                             blocks,
                         } => {
@@ -585,18 +585,36 @@ impl Function {
                         cg::Op::Jcc(jump_condition) => {
                             // Need to know what blocks this relates to, and what registers we got assigned there.
                             error!("instdata: {:#?}", instdata);
-                            todo!();
                             // The test is already done, so we only need to make jump and movs to the block destinations.
                             // Obtain the IR brif.
+                            let mut branch_true_args;
+                            let mut branch_true_block;
+                            let mut branch_false_args;
+                            let mut branch_false_block;
                             if let ir::InstructionData::Brif {
                                 opcode,
                                 arg,
                                 blocks,
                             } = self.fun.dfg.insts[s.ir_inst[0]]
                             {
+                                branch_true_args =
+                                    blocks[0].args_slice(&self.fun.dfg.value_lists).len();
+                                branch_true_block = blocks[0].block(&self.fun.dfg.value_lists);
+                                branch_false_args =
+                                    blocks[1].args_slice(&self.fun.dfg.value_lists).len();
+                                branch_false_block = blocks[0].block(&self.fun.dfg.value_lists);
                             } else {
                                 panic!("could not find brif for jcc");
                             }
+                            // Now... we need to handle the setup of the block we jump to.
+                            // Two sections, jump over the first if false.
+                            //   Section A:
+                            //     Setup to jump into the true block
+                            //     <At end here, jump to true block>
+                            //   Section B:
+                            //     Setup to jump into the false block
+                            //     <At end here, jump to false block>
+                            todo!("the block doesn't specify into which registers block args go? How do we reconcile this?")
                         }
                         _ => {}
                     }
