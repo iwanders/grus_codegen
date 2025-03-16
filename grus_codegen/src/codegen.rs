@@ -24,6 +24,12 @@ pub enum CodegenError {
     InvalidOperandCount { got: usize, expected: OperandRange },
 }
 
+#[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Copy, Clone)]
+pub enum JumpCondition {
+    /// Jump if ZF==0.
+    IsZero,
+}
+
 /// x86 instructions
 ///
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd)]
@@ -51,6 +57,11 @@ pub enum Op {
     /// TEST r/m16, imm16   TEST r/m32, imm32   TEST r/m64, imm64
     /// TEST r/m16, r16   TEST r/m32, r32   TEST r/m64, r64
     Test,
+
+    /// JCC - Jump if Condition is Met
+    ///
+    ///
+    Jcc(JumpCondition),
 }
 
 impl Op {
@@ -62,6 +73,7 @@ impl Op {
             Op::IMul(_) => 2..=2, // heh, technically 1..=3... with 3 only with intermediate, 1 for eax
             Op::Return => 0..=0,
             Op::Test => 2..=2,
+            Op::Jcc(_) => 0..=999,
         }
     }
     pub fn is_return(&self) -> bool {
@@ -329,6 +341,9 @@ impl Instruction {
                 v.push(RETN);
             }
             Op::Test => {
+                todo!()
+            }
+            Op::Jcc(_) => {
                 todo!()
             }
         }

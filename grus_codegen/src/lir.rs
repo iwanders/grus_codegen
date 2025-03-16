@@ -64,6 +64,10 @@ use crate::codegen as cg;
         - Can create bytecode for sections now.
         - Something with jumps and offsets?
 */
+
+/*
+Need to give blocks clear 'these are the input registers' to the block, currently we don't have that.
+*/
 use cranelift_codegen::isa::CallConv;
 use log::*;
 
@@ -438,6 +442,18 @@ impl Function {
                                 use_ir[0].into(),
                                 LirOperand::Machine(Operand::Immediate(0)).into(),
                             ]));
+                            // Collect the arguments that we'll end up using...
+                            let mut use_args: Vec<LirOperand> = vec![];
+                            for b in blocks.iter() {
+                                let args = b.args_slice(&dfg.value_lists);
+                                for v in args {
+                                    use_args.push((*v).into());
+                                }
+                            }
+                            // The second lower will split this into the two blocks, so here it is a single block.
+                            lirs.push(
+                                new_op(Op::Jcc(cg::JumpCondition::IsZero)).with_use(&use_args),
+                            );
                         }
 
                         _ => todo!(
@@ -562,6 +578,30 @@ impl Function {
 
         for b in self.blocks.iter_mut() {
             for s in b.sections.iter_mut() {
+                for (ii, linst) in s.lir_inst.iter().enumerate() {
+                    let instdata = &mut self.instdata[linst.0];
+                    match instdata.operation {
+                        // Only things to do for jne, we need to split that into the actual blocks.
+                        cg::Op::Jcc(jump_condition) => {
+                            // Need to know what blocks this relates to, and what registers we got assigned there.
+                            error!("instdata: {:#?}", instdata);
+                            todo!();
+                            // The test is already done, so we only need to make jump and movs to the block destinations.
+                            // Obtain the IR brif.
+                            if let ir::InstructionData::Brif {
+                                opcode,
+                                arg,
+                                blocks,
+                            } = self.fun.dfg.insts[s.ir_inst[0]]
+                            {
+                            } else {
+                                panic!("could not find brif for jcc");
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
                 if s.is_lowered() {
                     continue;
                 }
