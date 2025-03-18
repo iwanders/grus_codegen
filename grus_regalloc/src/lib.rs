@@ -6,6 +6,7 @@ use regalloc2::{
     Allocation, Inst, MachineEnv, Operand, OperandConstraint, PReg, RegAllocError, RegClass, VReg,
 };
 
+pub mod svg;
 pub mod wrapper;
 
 /*

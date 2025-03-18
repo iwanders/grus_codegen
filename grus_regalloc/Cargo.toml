@@ -12,3 +12,8 @@ regalloc2 = { workspace = true }
 cranelift-codegen = { workspace = true }
 
 thiserror = { workspace = true }
+
+
+# For the register allocation plots.
+svg = "0.18.0"
+svg_util = { git = "https://github.com/iwanders/svg_rs_util", rev = "d81192e69fda7d2f20d3ca5d26037a2ab7213638" }
