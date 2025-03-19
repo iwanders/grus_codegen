@@ -31,6 +31,9 @@ enum Commands {
 
         #[clap(long, default_value="Int4", value_parser=register_machine_parser)]
         register_machine: RegisterMachine,
+
+        #[clap(long)]
+        write_svg: Option<std::path::PathBuf>,
     },
 }
 
@@ -50,8 +53,9 @@ fn main() -> Result<()> {
             file,
             index,
             register_machine,
+            write_svg,
         } => {
-            grus_codegen::clif_support::reg_alloc(&file, *index, *register_machine)?;
+            grus_codegen::clif_support::reg_alloc(&file, *index, *register_machine, &write_svg)?;
         }
     }
     Ok(())

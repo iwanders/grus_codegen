@@ -4,6 +4,7 @@ use cranelift_codegen::ir::Function as CraneliftIrFunction;
 use cranelift_codegen::ir::Inst as IrInst;
 use cranelift_codegen::ir::InstructionData as IrInstructionData;
 use cranelift_codegen::ir::{self, Value};
+use cranelift_codegen::write::FuncWriter;
 
 use crate::codegen as cg;
 
@@ -438,10 +439,12 @@ impl Function {
                             debug!("Brif : {arg:#?}  {blocks:#?}");
                             // Model the branch as an instruction that reads one value... ignoring the fact that it
                             // writes values used by the branch for now.
+                            /*
                             lirs.push(new_op(Op::Test).with_use::<LirOperand>(&[
                                 use_ir[0].into(),
                                 LirOperand::Machine(Operand::Immediate(0)).into(),
                             ]));
+                            */
                             // Collect the arguments that we'll end up using...
                             let mut use_args: Vec<LirOperand> = vec![];
                             for b in blocks.iter() {
@@ -451,9 +454,9 @@ impl Function {
                                 }
                             }
                             // The second lower will split this into the two blocks, so here it is a single block.
-                            lirs.push(
-                                new_op(Op::Jcc(cg::JumpCondition::IsZero)).with_use(&use_args),
-                            );
+                            //lirs.push(
+                            //    new_op(Op::Jcc(cg::JumpCondition::IsZero)).with_use(&use_args),
+                            //);
                         }
 
                         _ => todo!(
@@ -614,6 +617,7 @@ impl Function {
                             //   Section B:
                             //     Setup to jump into the false block
                             //     <At end here, jump to false block>
+                            error!("Should we have ir regs here?: {:?}", s.ir_regs);
                             todo!("the block doesn't specify into which registers block args go? How do we reconcile this?")
                         }
                         _ => {}
@@ -654,6 +658,10 @@ impl Function {
                         } => {
                             error!("ir_regs: {:#?}", s.ir_regs);
 
+                            lirs.push(new_op(Op::Test).with_use(&[
+                                Operand::Reg(s.ir_regs[ii][0]),
+                                Operand::Immediate(0),
+                            ]));
                             todo!();
                         }
                         _ => todo!(
@@ -774,6 +782,8 @@ pub struct RegWrapper {
     block_preds: HashMap<RegBlock, Vec<RegBlock>>,
     inst_info: HashMap<RegInst, InstInfo>,
     value_info: HashMap<Value, VReg>,
+
+    fun: CraneliftIrFunction,
 }
 
 impl RegWrapper {
@@ -1021,6 +1031,7 @@ impl RegWrapper {
         let num_values = value_info.len();
         println!("block_insn: {block_insn:#?}");
 
+        let fun = fun.clone();
         Self {
             num_insts,
             num_blocks,
@@ -1032,6 +1043,7 @@ impl RegWrapper {
             block_preds,
             inst_info,
             value_info,
+            fun,
         }
     }
 }
@@ -1078,6 +1090,29 @@ impl RegFunction for RegWrapper {
         self.num_values
     }
     fn spillslot_size(&self, _: RegClass) -> usize {
+        todo!()
+    }
+}
+
+impl grus_regalloc::svg::FunPrinter for RegWrapper {
+    fn inst(&self, inst: RegInst) -> String {
+        //cranelift_codegen::write
+        let mut w = cranelift_codegen::write::PlainWriter {};
+        let mut s = String::new();
+        let t = &self.inst_info[&inst];
+        match &t.inst {
+            LirOrIrInst::Lir(inst) => {
+                s = format!("");
+            }
+            LirOrIrInst::Ir(inst) => {
+                w.write_instruction(&mut s, &self.fun, &Default::default(), *inst, 0)
+                    .expect("write failed");
+            }
+        }
+        s
+    }
+
+    fn block_start(&self, block: RegBlock) -> String {
         todo!()
     }
 }

@@ -184,6 +184,7 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
     file: &P,
     fun_index: usize,
     regmachine: RegisterMachine,
+    write_svg: &Option<std::path::PathBuf>,
 ) -> Result<()> {
     let f = std::fs::read_to_string(file).context(format!("failed to open {file:?}"))?;
     let test_file = cranelift_reader::parse_test(&f, Default::default())?;
@@ -193,10 +194,28 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
         .functions
         .get(fun_index)
         .context(format!("fun index {fun_index} out of bounds"))?;
-    let function = &function.0;
+    let func = &function.0;
 
-    let res = grus_regalloc::run_ir(function, &regmachine.to_env())?;
-    println!("res: {res:#?}");
+    let mut lirfun = crate::lir::Function::from_ir(&func);
+    lirfun.lirify();
+    lirfun.lower_first();
+    let reg_wrapper = lirfun.reg_wrapper();
+    println!("{lirfun:#?}");
+    let env = grus_regalloc::simple_int_machine(4, 0);
+    let reg_outputs = grus_regalloc::run(&reg_wrapper, &env)?;
+
+    println!("reg_outputs: {reg_outputs:#?}");
+    if let Some(svg_output_path) = write_svg {
+        let options = Default::default();
+        let document = grus_regalloc::svg::register_document(
+            &reg_wrapper,
+            &reg_outputs,
+            &env,
+            &options,
+            &reg_wrapper,
+        );
+        grus_regalloc::svg::svg::save(svg_output_path, &document)?;
+    }
 
     Ok(())
 }
