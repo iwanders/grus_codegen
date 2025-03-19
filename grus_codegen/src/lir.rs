@@ -97,6 +97,14 @@ pub enum LirOperand {
     Virtual(Value),
     Machine(cg::Operand),
 }
+impl LirOperand {
+    fn simple_string(&self) -> String {
+        match self {
+            LirOperand::Virtual(value) => format!("{value:?}"),
+            LirOperand::Machine(operand) => format!("{operand:?}"),
+        }
+    }
+}
 impl From<Value> for LirOperand {
     fn from(v: Value) -> LirOperand {
         LirOperand::Virtual(v)
@@ -163,6 +171,18 @@ impl InstructionData {
             operands: opv,
         };
         inst.serialize()
+    }
+    pub fn simple_string(&self) -> String {
+        let joined = |v: &[LirOperand]| {
+            v.iter()
+                .map(|z| z.simple_string())
+                .collect::<Vec<String>>()
+                .join(", ")
+        };
+        let def_string = joined(&self.def_operands);
+        let use_string = joined(&self.use_operands);
+        //let use_string = self.use_operands.iter().map(|z| format!("{z:?}")).join(" ");
+        format!("{}  = {:?} {}", def_string, self.operation, use_string)
     }
 }
 
@@ -768,6 +788,7 @@ struct InstInfo {
     is_branch: bool,
     operands: Vec<RegOperand>,
     inst: LirOrIrInst,
+    description: String,
 }
 
 #[derive(Debug)]
@@ -889,11 +910,13 @@ impl RegWrapper {
 
                         let is_ret = data.operation.is_return();
                         let is_branch = data.operation.is_branch();
+                        let description = data.simple_string();
                         let info = InstInfo {
                             is_ret,
                             is_branch,
                             operands,
                             inst: (*inst).into(),
+                            description,
                         };
                         inst_info.insert(reg_inst, info);
                     }
@@ -942,11 +965,23 @@ impl RegWrapper {
 
                         let is_ret = instdata.opcode().is_return();
                         let is_branch = instdata.opcode().is_branch();
+
+                        let mut w = cranelift_codegen::write::PlainWriter {};
+                        let mut description = String::new();
+                        w.write_instruction(
+                            &mut description,
+                            &fun,
+                            &Default::default(),
+                            *irinst,
+                            0,
+                        )
+                        .expect("write failed");
                         let info = InstInfo {
                             is_ret,
                             is_branch,
                             operands,
                             inst: (*irinst).into(),
+                            description,
                         };
                         println!(" irinst {irinst:?} with {info:?}");
                         let reg_inst = RegInst::new(inst_info.len());
@@ -1096,20 +1131,7 @@ impl RegFunction for RegWrapper {
 
 impl grus_regalloc::svg::FunPrinter for RegWrapper {
     fn inst(&self, inst: RegInst) -> String {
-        //cranelift_codegen::write
-        let mut w = cranelift_codegen::write::PlainWriter {};
-        let mut s = String::new();
-        let t = &self.inst_info[&inst];
-        match &t.inst {
-            LirOrIrInst::Lir(inst) => {
-                s = format!("");
-            }
-            LirOrIrInst::Ir(inst) => {
-                w.write_instruction(&mut s, &self.fun, &Default::default(), *inst, 0)
-                    .expect("write failed");
-            }
-        }
-        s
+        self.inst_info[&inst].description.clone()
     }
 
     fn block_start(&self, block: RegBlock) -> String {
