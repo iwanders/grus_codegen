@@ -1,3 +1,4 @@
+use regalloc2::Allocation as RegAllocation;
 use regalloc2::Block as RegBlock;
 use regalloc2::Function as RegFunction;
 use regalloc2::Inst as RegInst;
@@ -15,6 +16,8 @@ pub struct VisualisationOptions {
     pub row_height: f32,
     pub dpi: f32,
     pub font_size: f32,
+    pub row_code_width: f32,
+    pub row_position_width: f32,
 }
 impl Default for VisualisationOptions {
     fn default() -> Self {
@@ -22,6 +25,8 @@ impl Default for VisualisationOptions {
             row_height: 10.0,
             dpi: 100.0,
             font_size: 1.0,
+            row_code_width: 150.0,
+            row_position_width: 20.0,
         }
     }
 }
@@ -56,20 +61,37 @@ impl Row {
     }
 }
 
+#[derive(Clone, Debug)]
+struct ValuePosition {
+    offset: f32,
+    heading: String,
+    alloc: RegAllocation,
+}
+
 #[derive(Default, Clone, Debug)]
 struct RegisterGrid {
     rows: Vec<Row>,
+    values: Vec<ValuePosition>,
 }
 use svg::node::element::{Group, Text};
 impl RegisterGrid {
     fn to_group(&self, options: &VisualisationOptions) -> Group {
         let mut group = svg::node::element::Group::new();
         for (i, r) in self.rows.iter().enumerate() {
-            let pos_y = i as f32 * options.row_height;
+            let pos_y = (i + 1) as f32 * options.row_height;
 
             let t = Text::new(&r.descr)
                 .set("x", 0.0)
                 .set("y", pos_y)
+                .set("text-anchor", "start")
+                .set("font-size", format!("{}em", options.font_size))
+                .set("fill", "black");
+            group.append(t);
+        }
+        for value in self.values.iter() {
+            let t = Text::new(&value.heading)
+                .set("x", value.offset)
+                .set("y", 0.0)
                 .set("text-anchor", "start")
                 .set("font-size", format!("{}em", options.font_size))
                 .set("fill", "black");
@@ -94,6 +116,14 @@ Order is just the block order.
 Instructions are just by instruction order.
 */
 
+pub fn short_preg_str(preg: &RegPReg) -> String {
+    match preg.class() {
+        regalloc2::RegClass::Int => format!("i{}", preg.index()),
+        regalloc2::RegClass::Float => format!("e{}", preg.index()),
+        regalloc2::RegClass::Vector => format!("v{}", preg.index()),
+    }
+}
+
 pub fn register_document(
     fun: &impl RegFunction,
     output: &RegOutput,
@@ -112,9 +142,16 @@ pub fn register_document(
     while let Some(block) = block_stack.pop_front() {
         // Block start:
         let bparam = fun.block_params(block);
+
+        let joined = bparam
+            .iter()
+            .map(|z| format!("v{}", z.vreg()))
+            .collect::<Vec<String>>()
+            .join(", ");
+
         let block_start_row = Row {
             row_type: RowType::BlockStart(block),
-            descr: format!("block({bparam:?}"),
+            descr: format!("block{:}({joined:})", block.raw_u32()),
             operands: vec![],
         };
         grid.rows.push(block_start_row);
@@ -132,6 +169,29 @@ pub fn register_document(
         grid.rows.push(Row::space());
         block_stack.extend(fun.block_succs(block));
     }
+
+    if output.num_spillslots != 0 {
+        todo!("still need to implement spillslot handling");
+    }
+    if !env.fixed_stack_slots.is_empty() {
+        todo!();
+    }
+
+    let mut xoffset = options.row_code_width;
+    for pref_regs in env.preferred_regs_by_class.iter() {
+        for preg in pref_regs.iter() {
+            let value_entry = ValuePosition {
+                offset: xoffset,
+                heading: short_preg_str(preg),
+                alloc: RegAllocation::reg(*preg),
+            };
+            grid.values.push(value_entry);
+            xoffset += options.row_position_width;
+        }
+    }
+
+    // Iterate through the registers in our machine.
+    //
 
     /*
     let data = Data::new()
