@@ -12,6 +12,9 @@ pub mod wrapper;
 /*
 Todo: How do we specify that arguments exist in the machine at the start of the function?
     -> Probably... create an instruction that does a Def on regalloc2::OperandConstraint::FixedReg?
+
+    Are block params usually handled with spillslots?
+      https://github.com/bytecodealliance/regalloc2/blob/925df1b4674435a9322e21912926a68749517861/src/fastalloc/mod.rs#L998
 */
 
 /*

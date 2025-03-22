@@ -64,6 +64,12 @@ use crate::codegen as cg;
         - lower second; now that registers are available for all instructions remaining ir is lowered.
         - Can create bytecode for sections now.
         - Something with jumps and offsets?
+
+
+    Todo:
+      Handle function preamble / calling convention.
+      Handle block params
+      Figure out how other register allocator specify the operands and handle the block params / function start.
 */
 
 /*
@@ -601,7 +607,7 @@ impl Function {
 
         for b in self.blocks.iter_mut() {
             for s in b.sections.iter_mut() {
-                for (ii, linst) in s.lir_inst.iter().enumerate() {
+                for linst in s.lir_inst.iter() {
                     let instdata = &mut self.instdata[linst.0];
                     match instdata.operation {
                         // Only things to do for jne, we need to split that into the actual blocks.
@@ -610,10 +616,10 @@ impl Function {
                             error!("instdata: {:#?}", instdata);
                             // The test is already done, so we only need to make jump and movs to the block destinations.
                             // Obtain the IR brif.
-                            let mut branch_true_args;
-                            let mut branch_true_block;
-                            let mut branch_false_args;
-                            let mut branch_false_block;
+                            let branch_true_args;
+                            let branch_true_block;
+                            let branch_false_args;
+                            let branch_false_block;
                             if let ir::InstructionData::Brif {
                                 opcode,
                                 arg,
@@ -637,6 +643,10 @@ impl Function {
                             //   Section B:
                             //     Setup to jump into the false block
                             //     <At end here, jump to false block>
+                            let _ = branch_true_args;
+                            let _ = branch_true_block;
+                            let _ = branch_false_args;
+                            let _ = branch_false_block;
                             error!("Should we have ir regs here?: {:?}", s.ir_regs);
                             todo!("the block doesn't specify into which registers block args go? How do we reconcile this?")
                         }
@@ -826,7 +836,7 @@ impl RegWrapper {
 
         let mut first_inst_in_fun = None;
 
-        let last_block = lirfun.blocks.last().unwrap().id.0;
+        //let last_block = lirfun.blocks.last().unwrap().id.0;
         for b in lirfun.blocks.iter() {
             let regblock = RegBlock::new(b.id.0);
             // let is_entry_block = regblock == entry_block;
@@ -1135,6 +1145,7 @@ impl grus_regalloc::svg::FunPrinter for RegWrapper {
     }
 
     fn block_start(&self, block: RegBlock) -> String {
+        let _ = block;
         todo!()
     }
 }

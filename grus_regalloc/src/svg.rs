@@ -7,7 +7,6 @@ use regalloc2::Operand as RegOperand;
 use regalloc2::OperandKind;
 use regalloc2::Output as RegOutput;
 use regalloc2::PReg as RegPReg;
-use regalloc2::RegClass;
 use svg::Document;
 use svg::Node;
 
@@ -111,12 +110,12 @@ impl RegisterGrid {
 
             for (op_i, def_v) in r.operands.iter().enumerate() {
                 if op_i >= r.alloc.len() {
-                    println!("failed to find alloc for {op_i}");
+                    println!("failed to find alloc for {op_i}, at {r:?}");
                     continue;
                 }
                 let this_alloc = r.alloc[op_i];
                 let vreg = def_v.vreg();
-                if let Some(alloc_preg) = this_alloc.as_reg() {
+                if let Some(_alloc_preg) = this_alloc.as_reg() {
                     let pos = preg_pos[&this_alloc];
                     let t = Text::new(format!("v{:?}", vreg.vreg()))
                         .set("x", pos)
