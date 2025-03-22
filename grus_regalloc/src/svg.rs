@@ -4,8 +4,10 @@ use regalloc2::Function as RegFunction;
 use regalloc2::Inst as RegInst;
 use regalloc2::MachineEnv as RegMachineEnv;
 use regalloc2::Operand as RegOperand;
+use regalloc2::OperandKind;
 use regalloc2::Output as RegOutput;
 use regalloc2::PReg as RegPReg;
+use regalloc2::RegClass;
 use svg::Document;
 use svg::Node;
 
@@ -50,6 +52,7 @@ struct Row {
     row_type: RowType,
     descr: String,
     operands: Vec<RegOperand>,
+    alloc: Vec<RegAllocation>,
 }
 impl Row {
     pub fn space() -> Self {
@@ -57,6 +60,7 @@ impl Row {
             row_type: RowType::Space,
             descr: "".to_owned(),
             operands: vec![],
+            alloc: vec![],
         }
     }
 }
@@ -88,7 +92,11 @@ impl RegisterGrid {
                 .set("fill", "black");
             group.append(t);
         }
+
+        let mut preg_pos = std::collections::HashMap::new();
+
         for value in self.values.iter() {
+            preg_pos.insert(value.alloc, value.offset);
             let t = Text::new(&value.heading)
                 .set("x", value.offset)
                 .set("y", 0.0)
@@ -97,6 +105,31 @@ impl RegisterGrid {
                 .set("fill", "black");
             group.append(t);
         }
+
+        for (i, r) in self.rows.iter().enumerate() {
+            let pos_y = (i + 1) as f32 * options.row_height;
+
+            for (op_i, def_v) in r.operands.iter().enumerate() {
+                if op_i >= r.alloc.len() {
+                    println!("failed to find alloc for {op_i}");
+                    continue;
+                }
+                let this_alloc = r.alloc[op_i];
+                let vreg = def_v.vreg();
+                if let Some(alloc_preg) = this_alloc.as_reg() {
+                    let pos = preg_pos[&this_alloc];
+                    let t = Text::new(format!("v{:?}", vreg.vreg()))
+                        .set("x", pos)
+                        .set("y", pos_y)
+                        .set("text-anchor", "start")
+                        .set("font-size", format!("{}em", options.font_size))
+                        .set("fill", "black");
+                    group.append(t);
+                }
+                if def_v.kind() == OperandKind::Def {}
+            }
+        }
+
         group
     }
 }
@@ -153,15 +186,20 @@ pub fn register_document(
             row_type: RowType::BlockStart(block),
             descr: format!("block{:}({joined:})", block.raw_u32()),
             operands: vec![],
+            alloc: vec![],
         };
         grid.rows.push(block_start_row);
 
         // Instructions.
         for inst in fun.block_insns(block).iter() {
+            let allocs_args = output.inst_allocs(inst);
+            let use_allocs = &allocs_args[0..];
+            let allocations = use_allocs.to_vec();
             let inst_row = Row {
                 row_type: RowType::Instruction(inst),
                 descr: format!("{}", printer.inst(inst)),
                 operands: fun.inst_operands(inst).to_vec(),
+                alloc: allocations,
             };
             grid.rows.push(inst_row);
         }
@@ -194,6 +232,7 @@ pub fn register_document(
     //
 
     /*
+     */
     let data = Data::new()
         .move_to((-1000, 1000))
         .line_to((1000, 1000))
@@ -201,8 +240,7 @@ pub fn register_document(
         .line_to((-1000, -1000))
         .close();
 
-    let path = Path::new().set("fill", "black").set("d", data);
-    */
+    let path = Path::new().set("fill", "white").set("d", data);
     let rows = grid.rows.len();
     let height = rows as f32 * options.row_height;
     let width = 100.0;
@@ -213,5 +251,6 @@ pub fn register_document(
         .set("viewBox", (0, 0, 400, height)) // from -200,-200, width and height of 400.
         .set("width", format!("{}px", width * options.dpi))
         .set("height", format!("{}px", height * options.dpi))
+        .add(path)
         .add(group)
 }
