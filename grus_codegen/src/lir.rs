@@ -86,7 +86,7 @@ use regalloc2::Operand as RegOperand;
 use regalloc2::{InstRange, PRegSet, RegClass, VReg};
 */
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 struct BlockId(usize);
 impl BlockId {
     pub fn from(v: usize) -> BlockId {
@@ -193,12 +193,30 @@ impl InstructionData {
     }
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct BlockCall {
+    block: BlockId,
+    params: Vec<Value>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct BrifData {
+    condition: Value,
+    params: [BlockCall; 2],
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+enum Special {
+    Preamble,
+    Brif(BrifData),
+}
+
 #[derive(Clone, Debug)]
 struct Section {
     lir_inst: Vec<LirInst>,
     ir_inst: Vec<IrInst>,
     ir_regs: Vec<Vec<cg::Reg>>,
-    is_preamble: bool,
+    special: Option<Special>,
     is_lowered: bool,
 }
 impl Section {
@@ -207,7 +225,7 @@ impl Section {
             lir_inst: vec![],
             ir_inst: vec![v],
             ir_regs: vec![],
-            is_preamble: false,
+            special: None,
             is_lowered: false,
         }
     }
@@ -216,7 +234,7 @@ impl Section {
             lir_inst: vec![],
             ir_inst: vec![],
             ir_regs: vec![],
-            is_preamble: true,
+            special: Some(Special::Preamble),
             is_lowered: true,
         }
     }
@@ -224,7 +242,7 @@ impl Section {
         self.is_lowered
     }
     pub fn is_preamble(&self) -> bool {
-        self.is_preamble
+        self.special == Some(Special::Preamble)
     }
 }
 
@@ -491,24 +509,41 @@ impl Function {
                             debug!("Brif : {arg:#?}  {blocks:#?}");
                             // Model the branch as an instruction that reads one value... ignoring the fact that it
                             // writes values used by the branch for now.
-                            /*
-                            lirs.push(new_op(Op::Test).with_use::<LirOperand>(&[
+                            /*lirs.push(new_op(Op::Test).with_use::<LirOperand>(&[
                                 use_ir[0].into(),
                                 LirOperand::Machine(Operand::Immediate(0)).into(),
                             ]));
-                            */
                             // Collect the arguments that we'll end up using...
-                            let mut use_args: Vec<LirOperand> = vec![];
-                            for b in blocks.iter() {
-                                let args = b.args_slice(&dfg.value_lists);
-                                for v in args {
-                                    use_args.push((*v).into());
-                                }
-                            }
                             // The second lower will split this into the two blocks, so here it is a single block.
-                            //lirs.push(
-                            //    new_op(Op::Jcc(cg::JumpCondition::IsZero)).with_use(&use_args),
-                            //);
+                            lirs.push(
+                                new_op(Op::Jcc(cg::JumpCondition::IsZero)).with_use(&use_args),
+                            );*/
+                            let block_true = BlockCall {
+                                block: BlockId::from(
+                                    blocks[0].block(&dfg.value_lists).as_u32() as usize
+                                ),
+                                params: blocks[0]
+                                    .args_slice(&dfg.value_lists)
+                                    .iter()
+                                    .map(|z| (*z).into())
+                                    .collect(),
+                            };
+                            let block_false = BlockCall {
+                                block: BlockId::from(
+                                    blocks[1].block(&dfg.value_lists).as_u32() as usize
+                                ),
+                                params: blocks[1]
+                                    .args_slice(&dfg.value_lists)
+                                    .iter()
+                                    .map(|z| (*z).into())
+                                    .collect(),
+                            };
+                            let brif_data = BrifData {
+                                condition: arg,
+                                params: [block_true, block_false],
+                            };
+                            let brif_special = Special::Brif(brif_data);
+                            s.special = Some(brif_special);
                         }
 
                         _ => todo!(
@@ -1020,7 +1055,6 @@ impl RegWrapper {
 
                         let is_ret = instdata.opcode().is_return();
                         let is_branch = instdata.opcode().is_branch();
-
                         let mut w = cranelift_codegen::write::PlainWriter {};
                         let mut description = String::new();
                         w.write_instruction(
@@ -1040,6 +1074,36 @@ impl RegWrapper {
                         };
                         println!(" irinst {irinst:?} with {info:?}");
                         let reg_inst = RegInst::new(inst_info.len());
+
+                        // If it is a branch, add the data for this branch to the map that's used to lookup the branch
+                        // parameters for the register allocation.
+                        if is_branch {
+                            if let Some(special) = s.special.as_ref() {
+                                match special {
+                                    Special::Preamble => {}
+                                    Special::Brif(brif_data) => {
+                                        let key = (regblock, reg_inst);
+                                        let mut block_values = vec![];
+                                        for b in brif_data.params.iter() {
+                                            let mut this_call_values = vec![];
+                                            for v in b.params.iter() {
+                                                let vreg = value_info
+                                                    .entry(*v)
+                                                    .or_insert_with(|| {
+                                                        let regtype = RegClass::Int;
+                                                        VReg::new(v.as_u32() as usize, regtype)
+                                                    })
+                                                    .clone();
+                                                this_call_values.push(vreg);
+                                            }
+                                            block_values.push(this_call_values);
+                                        }
+                                        branch_blockparam.insert(key, block_values);
+                                    }
+                                }
+                            }
+                        }
+
                         if first_inst.is_none() {
                             first_inst = Some(reg_inst);
                         }
