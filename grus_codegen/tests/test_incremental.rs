@@ -1,3 +1,5 @@
+use anyhow::Context;
+
 #[test]
 fn test_incremental() -> Result<(), anyhow::Error> {
     let mut d = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -15,8 +17,13 @@ fn test_incremental() -> Result<(), anyhow::Error> {
     for f in filenames {
         let mut fpath = d.clone();
         fpath.push(f);
-        let res = grus_codegen::clif_support::test_files(&[fpath])?;
-        println!("res: {res:#?}");
+        let res = grus_codegen::clif_support::test_files(&[fpath.clone()])
+            .with_context(|| format!("testing file {fpath:?}"))?;
+        if res {
+            println!("Succeeded {fpath:?}");
+        } else {
+            println!("Failed {fpath:?}");
+        }
         assert!(res);
     }
 

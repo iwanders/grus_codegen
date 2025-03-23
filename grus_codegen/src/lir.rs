@@ -680,7 +680,9 @@ impl Function {
         for b in self.blocks.iter_mut() {
             for s in b.sections.iter_mut() {
                 if s.is_preamble() {
-                    todo!("do something with the preamble nops");
+                    todo!(
+                        "do something with the preamble nops, something with calling convention?"
+                    );
                 }
                 for linst in s.lir_inst.iter() {
                     let instdata = &mut self.instdata[linst.0];
@@ -831,6 +833,9 @@ impl Function {
 
         for b in self.blocks.iter() {
             for s in b.sections.iter() {
+                if s.is_preamble() {
+                    continue;
+                }
                 for i in s.lir_inst.iter() {
                     debug!("assembling: {:?}", self.instdata[i.0]);
                     let mut z = self.instdata[i.0].assemble().unwrap();
