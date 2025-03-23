@@ -1186,9 +1186,22 @@ impl RegWrapper {
         println!("num_blocks: {num_blocks:#?}");
 
         let num_values = value_info.len();
+
         println!("block_insn: {block_insn:#?}");
         println!("block_succs: {block_succs:#?}");
         println!("block_preds: {block_preds:#?}");
+
+        {
+            // Check that the values are consecutively numbered.
+            let mut keys = value_info.keys().collect::<Vec<_>>();
+            keys.sort();
+            for (i, k) in keys.iter().enumerate() {
+                println!("i: {i:?}, k: {k:?}");
+                if i != k.as_u32() as usize {
+                    panic!("value keys aren't consecutive");
+                }
+            }
+        }
 
         let fun = fun.clone();
         Self {
@@ -1232,6 +1245,11 @@ impl RegFunction for RegWrapper {
         &self.block_preds[&block]
     }
     fn block_params(&self, block: regalloc2::Block) -> &[VReg] {
+        println!("block pred: {block:?}");
+        println!("blcokparams: {:?}", self.block_params);
+        if block == self.entry_block {
+            return &[];
+        }
         &self.block_params[&block]
     }
     fn is_ret(&self, reginst: regalloc2::Inst) -> bool {
