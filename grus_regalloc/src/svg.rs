@@ -1,12 +1,15 @@
 use regalloc2::Allocation as RegAllocation;
+use regalloc2::AllocationKind;
 use regalloc2::Block as RegBlock;
 use regalloc2::Function as RegFunction;
 use regalloc2::Inst as RegInst;
 use regalloc2::MachineEnv as RegMachineEnv;
 use regalloc2::Operand as RegOperand;
+use regalloc2::OperandConstraint;
 use regalloc2::OperandKind;
 use regalloc2::Output as RegOutput;
 use regalloc2::PReg as RegPReg;
+use regalloc2::RegClass;
 use svg::Document;
 use svg::Node;
 
@@ -202,8 +205,8 @@ pub fn register_document(
         // Instructions.
         for inst in fun.block_insns(block).iter() {
             let allocs_args = output.inst_allocs(inst);
-            let use_allocs = &allocs_args[0..];
-            let allocations = use_allocs.to_vec();
+            let inst_allocs = &allocs_args[0..];
+            let allocations = inst_allocs.to_vec();
             let inst_row = Row {
                 row_type: RowType::Instruction(inst),
                 descr: format!("{}", printer.inst(inst)),

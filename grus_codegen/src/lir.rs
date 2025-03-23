@@ -207,7 +207,14 @@ pub struct BrifData {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 enum Special {
+    /// Preamble at the beginning of the function
+    ///
+    /// This sets up the stack, if any.
+    /// This creates 'n' Nop instructions that create the input values out of thin air.
     Preamble,
+    /// Branch if data
+    ///
+    /// Holds the values used to call the other branches.
     Brif(BrifData),
 }
 
@@ -1034,6 +1041,28 @@ impl RegWrapper {
                                 regalloc2::OperandPos::Early,
                             );
                             operands.push(operand);
+                        }
+                        // If this is a branch, add the values used by the block calls as use operands.
+                        if let Some(special) = &s.special {
+                            if let Special::Brif(data) = special {
+                                for b in data.params.iter() {
+                                    for branch_param in b.params.iter() {
+                                        let valuetype = fun.dfg.value_type(*branch_param);
+                                        let regtype = if valuetype.is_int() {
+                                            RegClass::Int
+                                        } else {
+                                            RegClass::Float
+                                        };
+                                        let operand = RegOperand::new(
+                                            VReg::new(branch_param.as_u32() as usize, regtype),
+                                            regalloc2::OperandConstraint::Any,
+                                            regalloc2::OperandKind::Use,
+                                            regalloc2::OperandPos::Early,
+                                        );
+                                        operands.push(operand);
+                                    }
+                                }
+                            }
                         }
 
                         // Results of instruction.
