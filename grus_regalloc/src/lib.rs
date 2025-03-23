@@ -441,7 +441,7 @@ mod winged {
                 // This is not the entry block, so the block parameters need to be in registers..
                 let bparams = fun.block_params(**block);
                 for bparam in bparams.iter() {
-                    machine.def_register(&Operand::any_def(*bparam));
+                    let _ = machine.def_register(&Operand::any_def(*bparam))?;
                 }
             }
             for insn in fun.block_insns(**block).iter() {

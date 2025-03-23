@@ -70,6 +70,10 @@ use crate::codegen as cg;
       Handle function preamble / calling convention.
       Handle block params
       Figure out how other register allocator specify the operands and handle the block params / function start.
+
+
+      links:
+        https://github.com/bytecodealliance/regalloc2/pull/170  On blockparams in branches.
 */
 
 /*
@@ -683,6 +687,7 @@ impl Function {
                     match instdata.operation {
                         // Only things to do for jne, we need to split that into the actual blocks.
                         cg::Op::Jcc(jump_condition) => {
+                            let _ = jump_condition;
                             // Need to know what blocks this relates to, and what registers we got assigned there.
                             error!("instdata: {:#?}", instdata);
                             // The test is already done, so we only need to make jump and movs to the block destinations.
@@ -692,8 +697,8 @@ impl Function {
                             let branch_false_args;
                             let branch_false_block;
                             if let ir::InstructionData::Brif {
-                                opcode,
-                                arg,
+                                opcode: _,
+                                arg: _,
                                 blocks,
                             } = self.fun.dfg.insts[s.ir_inst[0]]
                             {
@@ -753,9 +758,9 @@ impl Function {
                             ),
                         },
                         IrInstructionData::Brif {
-                            opcode,
-                            arg,
-                            blocks,
+                            opcode: _,
+                            arg: _,
+                            blocks: _,
                         } => {
                             error!("ir_regs: {:#?}", s.ir_regs);
 

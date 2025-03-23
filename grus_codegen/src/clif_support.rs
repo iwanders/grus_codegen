@@ -173,9 +173,9 @@ pub enum RegisterMachine {
 impl RegisterMachine {
     pub fn to_env(&self) -> regalloc2::MachineEnv {
         match *self {
-            RegisterMachine::Int2 => grus_regalloc::simple_int_machine(1, 1),
-            RegisterMachine::Int4 => grus_regalloc::simple_int_machine(4, 4),
-            RegisterMachine::Int8 => grus_regalloc::simple_int_machine(8, 8),
+            RegisterMachine::Int2 => grus_regalloc::simple_int_machine(1, 0),
+            RegisterMachine::Int4 => grus_regalloc::simple_int_machine(4, 0),
+            RegisterMachine::Int8 => grus_regalloc::simple_int_machine(8, 0),
         }
     }
 }
@@ -220,7 +220,7 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
     lirfun.lower_first();
     let reg_wrapper = lirfun.reg_wrapper();
     println!("{lirfun:#?}");
-    let env = grus_regalloc::simple_int_machine(4, 0);
+    let env = regmachine.to_env();
 
     if let Some(regalloc_serialize_path) = write_regalloc_serialize {
         let serfun = regalloc2::serialize::SerializableFunction::new(&reg_wrapper, env.clone());

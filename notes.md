@@ -50,3 +50,9 @@ With
 ```
 wasmtime$ cargo r --release -- explore  <file_to_wasm/wast>
 ```
+
+
+### Register plot
+```
+cargo r  --example tool -- reg-alloc filetests/0006b* --write-svg /tmp/registers.svg --allocator Winged --write-regalloc-serialize /tmp/foo.json
+```
