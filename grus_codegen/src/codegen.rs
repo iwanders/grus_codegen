@@ -62,6 +62,11 @@ pub enum Op {
     ///
     ///
     Jcc(JumpCondition),
+
+    /// NOP - No Operation
+    ///
+    /// Does nothing except advance the EIP register.
+    Nop,
 }
 
 impl Op {
@@ -74,6 +79,7 @@ impl Op {
             Op::Return => 0..=0,
             Op::Test => 2..=2,
             Op::Jcc(_) => 0..=999,
+            Op::Nop => 0..=0,
         }
     }
     pub fn is_return(&self) -> bool {
@@ -344,6 +350,9 @@ impl Instruction {
                 todo!()
             }
             Op::Jcc(_) => {
+                todo!()
+            }
+            Op::Nop => {
                 todo!()
             }
         }

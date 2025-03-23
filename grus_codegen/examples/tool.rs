@@ -39,6 +39,9 @@ enum Commands {
         #[clap(long)]
         write_svg: Option<std::path::PathBuf>,
 
+        #[clap(long)]
+        write_regalloc_serialize: Option<std::path::PathBuf>,
+
         #[clap(long, value_parser=register_allocator_parser, default_value="Winged")]
         allocator: RegisterAllocator,
     },
@@ -62,6 +65,7 @@ fn main() -> Result<()> {
             register_machine,
             write_svg,
             allocator,
+            write_regalloc_serialize,
         } => {
             grus_codegen::clif_support::reg_alloc(
                 &file,
@@ -69,6 +73,7 @@ fn main() -> Result<()> {
                 *register_machine,
                 allocator,
                 &write_svg,
+                &write_regalloc_serialize,
             )?;
         }
     }

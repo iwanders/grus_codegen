@@ -594,6 +594,7 @@ dependencies = [
  "hashbrown 0.15.2",
  "log",
  "rustc-hash",
+ "serde",
  "smallvec",
 ]
 

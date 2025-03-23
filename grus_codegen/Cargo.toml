@@ -6,17 +6,17 @@ license = "Apache-2.0 WITH LLVM-exception"
 
 [dependencies]
 
-target-lexicon = {workspace = true}
+target-lexicon = { workspace = true }
 
 
-cranelift-codegen = {workspace = true}
-cranelift-reader = {workspace = true}
-cranelift = {workspace = true}
+cranelift-codegen = { workspace = true }
+cranelift-reader = { workspace = true }
+cranelift = { workspace = true }
 
 
-anyhow = {workspace=true}
-grus_module = {workspace=true}
-grus_regalloc = {workspace=true}
+anyhow = { workspace = true }
+grus_module = { workspace = true }
+grus_regalloc = { workspace = true }
 
 log = { workspace = true }
 thiserror = { workspace = true }
@@ -26,22 +26,21 @@ arrayvec = { workspace = true }
 regalloc2 = { workspace = true }
 serde = { workspace = true }
 
+serde_json = { workspace = true }
 
 
 #############################################################
 [dev-dependencies]
-cranelift-native = {workspace = true}
-cranelift-object =  {workspace = true}
-cranelift-module = {workspace = true}
-cranelift-jit = {workspace = true}
+cranelift-native = { workspace = true }
+cranelift-object = { workspace = true }
+cranelift-module = { workspace = true }
+cranelift-jit = { workspace = true }
 
-clap =  {workspace = true}
+clap = { workspace = true }
 
 
 env_logger = { workspace = true }
 serde_json = { workspace = true }
-
-
 
 
 walkdir = "2.5.0"

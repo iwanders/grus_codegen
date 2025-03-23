@@ -28,7 +28,7 @@ cranelift-native = "0.116.1"
 cranelift-object = "0.116.1"
 cranelift-module = "0.116.1"
 cranelift-jit = "0.116.1"
-regalloc2 = "0.11.1"
+regalloc2 = { version = "0.11.1", features = ["enable-serde"] }
 thiserror = "2"
 
 object = "0.36.7"

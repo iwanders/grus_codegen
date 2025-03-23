@@ -203,6 +203,7 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
     regmachine: RegisterMachine,
     allocator: &RegisterAllocator,
     write_svg: &Option<std::path::PathBuf>,
+    write_regalloc_serialize: &Option<std::path::PathBuf>,
 ) -> Result<()> {
     let f = std::fs::read_to_string(file).context(format!("failed to open {file:?}"))?;
     let test_file = cranelift_reader::parse_test(&f, Default::default())?;
@@ -220,6 +221,16 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
     let reg_wrapper = lirfun.reg_wrapper();
     println!("{lirfun:#?}");
     let env = grus_regalloc::simple_int_machine(4, 0);
+
+    if let Some(regalloc_serialize_path) = write_regalloc_serialize {
+        let serfun = regalloc2::serialize::SerializableFunction::new(&reg_wrapper, env.clone());
+        use std::io::Write;
+        let file = std::fs::File::create(regalloc_serialize_path)?;
+        let mut writer = std::io::BufWriter::new(file);
+        serde_json::to_writer(&mut writer, &serfun)?;
+        writer.flush()?;
+    }
+
     let reg_outputs = match allocator {
         RegisterAllocator::Winged => grus_regalloc::run(&reg_wrapper, &env)?,
         RegisterAllocator::Regalloc2Ion | RegisterAllocator::Regalloc2Fastalloc => {
@@ -231,7 +242,6 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
             regalloc2::run(&reg_wrapper, &env, &options)?
         }
     };
-
     println!("reg_outputs: {reg_outputs:#?}");
     if let Some(svg_output_path) = write_svg {
         let options = Default::default();

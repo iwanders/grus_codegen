@@ -126,6 +126,7 @@ impl From<cg::Operand> for LirOperand {
 pub struct InstructionData {
     pub operation: cg::Op,
     // Should we have def_operand and use_operand?
+    // The register allocator can ONLY have a single def operand!
     pub def_operands: Vec<LirOperand>,
     pub use_operands: Vec<LirOperand>,
 }
@@ -197,6 +198,7 @@ struct Section {
     lir_inst: Vec<LirInst>,
     ir_inst: Vec<IrInst>,
     ir_regs: Vec<Vec<cg::Reg>>,
+    is_preamble: bool,
     is_lowered: bool,
 }
 impl Section {
@@ -205,11 +207,24 @@ impl Section {
             lir_inst: vec![],
             ir_inst: vec![v],
             ir_regs: vec![],
+            is_preamble: false,
             is_lowered: false,
+        }
+    }
+    fn preamble() -> Self {
+        Self {
+            lir_inst: vec![],
+            ir_inst: vec![],
+            ir_regs: vec![],
+            is_preamble: true,
+            is_lowered: true,
         }
     }
     pub fn is_lowered(&self) -> bool {
         self.is_lowered
+    }
+    pub fn is_preamble(&self) -> bool {
+        self.is_preamble
     }
 }
 
@@ -300,6 +315,11 @@ impl Function {
 
             lirblock.block_params = dfg.block_params(b).iter().copied().collect();
 
+            if ir_entry_block == b {
+                // This is the entry block, push a section for the function preamble.
+                lirblock.push_section(Section::preamble());
+            }
+
             for inst in layout.block_insts(b) {
                 let s = Section::from_ir(inst);
                 lirblock.push_section(s);
@@ -354,6 +374,12 @@ impl Function {
             for s in b.sections.iter_mut() {
                 // let lirs = &mut s.lir_inst;
                 let mut lirs = vec![];
+                if s.is_preamble() {
+                    // Create a nop for each argument... that will ultimately def the argument.
+                    for arg_v in self.fun_args.iter() {
+                        lirs.push(new_op(Op::Nop).with_def(&[(*arg_v)]));
+                    }
+                }
                 for inst in s.ir_inst.iter() {
                     let instdata = self.fun.dfg.insts[*inst];
                     let def_ir = self.fun.dfg.inst_results(*inst);
@@ -607,6 +633,9 @@ impl Function {
 
         for b in self.blocks.iter_mut() {
             for s in b.sections.iter_mut() {
+                if s.is_preamble() {
+                    todo!("do something with the preamble nops");
+                }
                 for linst in s.lir_inst.iter() {
                     let instdata = &mut self.instdata[linst.0];
                     match instdata.operation {
@@ -810,6 +839,7 @@ pub struct RegWrapper {
     block_insn: HashMap<RegBlock, InstRange>,
     block_params: HashMap<RegBlock, Vec<VReg>>,
     block_succs: HashMap<RegBlock, Vec<RegBlock>>,
+    branch_blockparam: HashMap<(RegBlock, RegInst), Vec<Vec<VReg>>>,
     block_preds: HashMap<RegBlock, Vec<RegBlock>>,
     inst_info: HashMap<RegInst, InstInfo>,
     value_info: HashMap<Value, VReg>,
@@ -825,6 +855,8 @@ impl RegWrapper {
         let mut block_preds: HashMap<RegBlock, Vec<RegBlock>> = Default::default();
         let mut inst_info: HashMap<RegInst, InstInfo> = Default::default();
         let mut value_info: HashMap<Value, VReg> = Default::default();
+        let mut branch_blockparam: HashMap<(RegBlock, RegInst), Vec<Vec<VReg>>> =
+            Default::default();
 
         // Verify the blocks are sequentially numbered.
         {
@@ -1056,6 +1088,7 @@ impl RegWrapper {
             }
         }
 
+        /*
         // Find the first instruction in the entry block, into that instruction we'll inject the
         // function arguments.
         if let Some(reg_inst) = first_inst_in_fun {
@@ -1082,7 +1115,7 @@ impl RegWrapper {
             }
         } else {
             panic!()
-        }
+        }*/
 
         let num_insts = inst_info.len();
         let num_blocks = block_insn.len();
@@ -1103,6 +1136,7 @@ impl RegWrapper {
             block_params,
             block_succs,
             block_preds,
+            branch_blockparam,
             inst_info,
             value_info,
             fun,
@@ -1142,21 +1176,30 @@ impl RegFunction for RegWrapper {
     fn is_branch(&self, reginst: regalloc2::Inst) -> bool {
         self.inst_info[&reginst].is_branch
     }
-    fn branch_blockparams(&self, _: regalloc2::Block, _: regalloc2::Inst, _: usize) -> &[VReg] {
-        todo!()
+    fn branch_blockparams(
+        &self,
+        block: regalloc2::Block,
+        inst: regalloc2::Inst,
+        succs_index: usize,
+    ) -> &[VReg] {
+        if let Some(res) = self.branch_blockparam.get(&(block, inst)) {
+            &res[succs_index]
+        } else {
+            &[]
+        }
     }
     fn inst_operands(&self, reginst: regalloc2::Inst) -> &[regalloc2::Operand] {
         &self.inst_info[&reginst].operands
     }
     fn inst_clobbers(&self, _inst: regalloc2::Inst) -> PRegSet {
-        // PRegSet::default()
-        todo!()
+        PRegSet::default()
+        //todo!()
     }
     fn num_vregs(&self) -> usize {
         self.num_values
     }
     fn spillslot_size(&self, _: RegClass) -> usize {
-        todo!()
+        8
     }
 }
 
