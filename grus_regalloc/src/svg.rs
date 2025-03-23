@@ -26,7 +26,7 @@ impl Default for VisualisationOptions {
             row_height: 10.0,
             dpi: 100.0,
             font_size: 1.0,
-            row_code_width: 150.0,
+            row_code_width: 200.0,
             row_position_width: 20.0,
         }
     }
@@ -125,6 +125,16 @@ impl RegisterGrid {
                         .set("fill", "black");
                     group.append(t);
                 }
+                if let Some(_alloc_spill) = this_alloc.as_stack() {
+                    let pos = preg_pos[&this_alloc];
+                    let t = Text::new(format!("v{:?}", vreg.vreg()))
+                        .set("x", pos)
+                        .set("y", pos_y)
+                        .set("text-anchor", "start")
+                        .set("font-size", format!("{}em", options.font_size))
+                        .set("fill", "black");
+                    group.append(t);
+                }
                 if def_v.kind() == OperandKind::Def {}
             }
         }
@@ -207,15 +217,16 @@ pub fn register_document(
         block_stack.extend(fun.block_succs(block));
     }
 
-    if output.num_spillslots != 0 {
-        todo!("still need to implement spillslot handling");
-    }
     if !env.fixed_stack_slots.is_empty() {
         todo!();
     }
 
     let mut xoffset = options.row_code_width;
-    for pref_regs in env.preferred_regs_by_class.iter() {
+    for pref_regs in env
+        .preferred_regs_by_class
+        .iter()
+        .chain(env.non_preferred_regs_by_class.iter())
+    {
         for preg in pref_regs.iter() {
             let value_entry = ValuePosition {
                 offset: xoffset,
@@ -225,6 +236,15 @@ pub fn register_document(
             grid.values.push(value_entry);
             xoffset += options.row_position_width;
         }
+    }
+    for spill in 0..output.num_spillslots {
+        let value_entry = ValuePosition {
+            offset: xoffset,
+            heading: format!("s{spill}"),
+            alloc: RegAllocation::stack(regalloc2::SpillSlot::new(spill)),
+        };
+        grid.values.push(value_entry);
+        xoffset += options.row_position_width;
     }
 
     // Iterate through the registers in our machine.

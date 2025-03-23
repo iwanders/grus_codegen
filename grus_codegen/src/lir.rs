@@ -1281,7 +1281,7 @@ impl RegFunction for RegWrapper {
         self.num_values
     }
     fn spillslot_size(&self, _: RegClass) -> usize {
-        8
+        1
     }
 }
 
