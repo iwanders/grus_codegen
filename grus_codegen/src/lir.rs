@@ -826,6 +826,19 @@ impl RegWrapper {
         let mut inst_info: HashMap<RegInst, InstInfo> = Default::default();
         let mut value_info: HashMap<Value, VReg> = Default::default();
 
+        // Verify the blocks are sequentially numbered.
+        {
+            let mut v = std::collections::BTreeSet::new();
+            for b in lirfun.blocks.iter() {
+                v.insert(b.id.0);
+            }
+            for (i, bi) in v.iter().enumerate() {
+                if i != *bi {
+                    panic!("blocks aren't ordered consecutively");
+                }
+            }
+        }
+
         let fun = &lirfun.fun;
         let entry_block = RegBlock::new(
             lirfun
@@ -1073,8 +1086,12 @@ impl RegWrapper {
 
         let num_insts = inst_info.len();
         let num_blocks = block_insn.len();
+        println!("num_blocks: {num_blocks:#?}");
+
         let num_values = value_info.len();
         println!("block_insn: {block_insn:#?}");
+        println!("block_succs: {block_succs:#?}");
+        println!("block_preds: {block_preds:#?}");
 
         let fun = fun.clone();
         Self {
@@ -1107,9 +1124,13 @@ impl RegFunction for RegWrapper {
         self.block_insn[&block]
     }
     fn block_succs(&self, block: regalloc2::Block) -> &[regalloc2::Block] {
+        println!("block succ: {block:?}");
+        println!("all: {:?}", self.block_succs);
         &self.block_succs[&block]
     }
     fn block_preds(&self, block: regalloc2::Block) -> &[regalloc2::Block] {
+        println!("block pred: {block:?}");
+        println!("all: {:?}", self.block_preds);
         &self.block_preds[&block]
     }
     fn block_params(&self, block: regalloc2::Block) -> &[VReg] {

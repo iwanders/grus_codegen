@@ -225,7 +225,7 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
         RegisterAllocator::Regalloc2Ion | RegisterAllocator::Regalloc2Fastalloc => {
             let options = regalloc2::RegallocOptions {
                 verbose_log: false,
-                validate_ssa: false,
+                validate_ssa: true,
                 algorithm: allocator.to_regalloc2_algorithm().unwrap(),
             };
             regalloc2::run(&reg_wrapper, &env, &options)?

@@ -4,10 +4,10 @@ target x86_64
 
 function %branch_diverge(i64, i64) -> i64 system_v {
 
-block1(v0: i64, v1: i64):
-    brif v0, block2(v0), block2(v1)
+block0(v0: i64, v1: i64):
+    brif v0, block1(v0), block1(v1)
 
-block2(v4: i64):
+block1(v4: i64):
     ;v11 = iadd_imm v4, 1
     ;v11 = iadd_imm v1, 1
     v6 = iconst.i64 1
