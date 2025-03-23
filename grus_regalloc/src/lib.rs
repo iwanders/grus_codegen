@@ -346,6 +346,19 @@ mod winged {
             .chain(fun.block_succs(entry_b).iter())
             .collect();
         for block in block_ids.iter() {
+            if **block != entry_b {
+                // This is not the entry block, so the block parameters will... somehow exist.
+                let bparams = fun.block_params(**block);
+                for bparam in bparams.iter() {
+                    varmap.insert(
+                        *bparam,
+                        VariableState {
+                            duration: insn..=insn,
+                            reads: vec![],
+                        },
+                    );
+                }
+            }
             for insn in fun.block_insns(**block).iter() {
                 println!("Instzzzz: {insn:?}");
                 let ops = fun.inst_operands(insn);
@@ -424,6 +437,13 @@ mod winged {
         }
 
         for block in block_ids.iter() {
+            if **block != entry_b {
+                // This is not the entry block, so the block parameters need to be in registers..
+                let bparams = fun.block_params(**block);
+                for bparam in bparams.iter() {
+                    machine.def_register(&Operand::any_def(*bparam));
+                }
+            }
             for insn in fun.block_insns(**block).iter() {
                 let ops = fun.inst_operands(insn);
                 let is_first_instruction = Some(insn) == first_instruction;

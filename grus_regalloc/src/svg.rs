@@ -249,12 +249,8 @@ pub fn register_document(
         grid.values.push(value_entry);
         xoffset += options.row_position_width;
     }
+    println!("output edits: {:?}", output.edits);
 
-    // Iterate through the registers in our machine.
-    //
-
-    /*
-     */
     let data = Data::new()
         .move_to((-1000, 1000))
         .line_to((1000, 1000))
