@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use grus_codegen::clif_support::RegisterMachine;
+use grus_codegen::clif_support::{RegisterAllocator, RegisterMachine};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -11,6 +11,10 @@ struct Cli {
 
 fn register_machine_parser(s: &str) -> Result<RegisterMachine, serde_json::Error> {
     serde_json::from_str::<RegisterMachine>(&format!("\"{}\"", s))
+}
+
+fn register_allocator_parser(s: &str) -> Result<RegisterAllocator, serde_json::Error> {
+    serde_json::from_str::<RegisterAllocator>(&format!("\"{}\"", s))
 }
 
 #[derive(Subcommand)]
@@ -34,6 +38,9 @@ enum Commands {
 
         #[clap(long)]
         write_svg: Option<std::path::PathBuf>,
+
+        #[clap(long, value_parser=register_allocator_parser, default_value="Winged")]
+        allocator: RegisterAllocator,
     },
 }
 
@@ -54,8 +61,15 @@ fn main() -> Result<()> {
             index,
             register_machine,
             write_svg,
+            allocator,
         } => {
-            grus_codegen::clif_support::reg_alloc(&file, *index, *register_machine, &write_svg)?;
+            grus_codegen::clif_support::reg_alloc(
+                &file,
+                *index,
+                *register_machine,
+                allocator,
+                &write_svg,
+            )?;
         }
     }
     Ok(())

@@ -180,10 +180,28 @@ impl RegisterMachine {
     }
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Default)]
+pub enum RegisterAllocator {
+    #[default]
+    Winged,
+    Regalloc2Ion,
+    Regalloc2Fastalloc,
+}
+impl RegisterAllocator {
+    pub fn to_regalloc2_algorithm(&self) -> Option<regalloc2::Algorithm> {
+        match *self {
+            RegisterAllocator::Winged => None,
+            RegisterAllocator::Regalloc2Ion => Some(regalloc2::Algorithm::Ion),
+            RegisterAllocator::Regalloc2Fastalloc => Some(regalloc2::Algorithm::Fastalloc),
+        }
+    }
+}
+
 pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
     file: &P,
     fun_index: usize,
     regmachine: RegisterMachine,
+    allocator: &RegisterAllocator,
     write_svg: &Option<std::path::PathBuf>,
 ) -> Result<()> {
     let f = std::fs::read_to_string(file).context(format!("failed to open {file:?}"))?;
@@ -202,7 +220,17 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
     let reg_wrapper = lirfun.reg_wrapper();
     println!("{lirfun:#?}");
     let env = grus_regalloc::simple_int_machine(4, 0);
-    let reg_outputs = grus_regalloc::run(&reg_wrapper, &env)?;
+    let reg_outputs = match allocator {
+        RegisterAllocator::Winged => grus_regalloc::run(&reg_wrapper, &env)?,
+        RegisterAllocator::Regalloc2Ion | RegisterAllocator::Regalloc2Fastalloc => {
+            let options = regalloc2::RegallocOptions {
+                verbose_log: false,
+                validate_ssa: false,
+                algorithm: allocator.to_regalloc2_algorithm().unwrap(),
+            };
+            regalloc2::run(&reg_wrapper, &env, &options)?
+        }
+    };
 
     println!("reg_outputs: {reg_outputs:#?}");
     if let Some(svg_output_path) = write_svg {
