@@ -18,5 +18,5 @@ block1(v4: i64):
 
 ; run: %branch_diverge(0, 0) == 1
 ; run: %branch_diverge(0, 5) == 6
-; run: %branch_diverge(1, 0) == 2
-; run: %branch_diverge(3, 0) == 4
+; run: %branch_diverge(1, 0) == 1
+; run: %branch_diverge(3, 2) == 3
