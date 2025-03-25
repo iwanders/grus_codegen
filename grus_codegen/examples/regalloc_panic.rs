@@ -25,13 +25,19 @@ impl Function for DummyFunction {
         self.instructions.len()
     }
     fn num_blocks(&self) -> usize {
-        self.blocks.len()
+        self.blocks.len() + 10
     }
     fn entry_block(&self) -> Block {
         self.entry_block
     }
     fn block_insns(&self, block: regalloc2::Block) -> InstRange {
-        self.blocks[&block]
+        println!("block: {block:?}");
+        if let Some(r) = self.blocks.get(&block) {
+            self.blocks[&block]
+        } else {
+            println!("Don't have this block, returning a dummy range");
+            InstRange::new(Inst::new(0), Inst::new(1))
+        }
     }
     fn block_succs(&self, block: regalloc2::Block) -> &[regalloc2::Block] {
         if let Some(exists) = self.block_succs.get(&block) {
@@ -157,15 +163,15 @@ fn main() -> Result<(), anyhow::Error> {
             (block1, InstRange::new(Inst::new(0), Inst::new(1))),
             (block2, InstRange::new(Inst::new(1), Inst::new(3))),
         ]),
-        block_succs: HashMap::from([(block1, vec![block2])]),
-        block_preds: HashMap::from([(block2, vec![block1])]),
+        block_succs: HashMap::from([(block1, vec![block2]), (block2, vec![])]),
+        block_preds: HashMap::from([(block2, vec![block1]), (block1, vec![])]),
         instructions: vec![
             brif_inst.clone(),
             assignv6.clone(),
             addv11.clone(),
             retv11.clone(),
         ],
-        num_values: 4, // v0, v1, v6, v11
+        num_values: 12, // v0, v1, v6, v11
     };
     let options = regalloc2::RegallocOptions {
         verbose_log: false,
