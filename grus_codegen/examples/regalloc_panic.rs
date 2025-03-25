@@ -4,6 +4,7 @@ use regalloc2::{
 
 use std::collections::HashMap;
 
+#[derive(Clone)]
 struct InstructionData {
     is_return: bool,
     is_branch: bool,
@@ -33,10 +34,18 @@ impl Function for DummyFunction {
         self.blocks[&block]
     }
     fn block_succs(&self, block: regalloc2::Block) -> &[regalloc2::Block] {
-        &self.block_succs[&block]
+        if let Some(exists) = self.block_succs.get(&block) {
+            &exists
+        } else {
+            &[]
+        }
     }
     fn block_preds(&self, block: regalloc2::Block) -> &[regalloc2::Block] {
-        &self.block_preds[&block]
+        if let Some(exists) = self.block_preds.get(&block) {
+            &exists
+        } else {
+            &[]
+        }
     }
     fn block_params(&self, block: regalloc2::Block) -> &[VReg] {
         &[]
@@ -142,26 +151,62 @@ fn main() -> Result<(), anyhow::Error> {
         operands: vec![Operand::any_use(v11)],
     };
 
-    let dummy = DummyFunction {
+    let dummy_bad_block = DummyFunction {
         entry_block: block1,
         blocks: HashMap::from([
-            (block1, InstRange::new(Inst::new(0), Inst::new(0))),
+            (block1, InstRange::new(Inst::new(0), Inst::new(1))),
             (block2, InstRange::new(Inst::new(1), Inst::new(3))),
         ]),
         block_succs: HashMap::from([(block1, vec![block2])]),
         block_preds: HashMap::from([(block2, vec![block1])]),
-        instructions: vec![brif_inst, assignv6, addv11, retv11],
+        instructions: vec![
+            brif_inst.clone(),
+            assignv6.clone(),
+            addv11.clone(),
+            retv11.clone(),
+        ],
         num_values: 4, // v0, v1, v6, v11
     };
     let options = regalloc2::RegallocOptions {
         verbose_log: false,
         validate_ssa: true,
-        //algorithm: regalloc2::Algorithm::Fastalloc,
-        algorithm: regalloc2::Algorithm::Ion,
+        algorithm: regalloc2::Algorithm::Fastalloc,
+        //algorithm: regalloc2::Algorithm::Ion,
     };
 
     let env = simple_int_machine(3, 2);
-    regalloc2::run(&dummy, &env, &options)?;
+    let bad_block = regalloc2::run(&dummy_bad_block, &env, &options);
+    println!("bad_block: {bad_block:?}");
+
+    // Fix the blocks... then it panics on the values.
+    let block0 = Block::new(0);
+    let block1 = Block::new(1);
+
+    let dummy_bad_values = DummyFunction {
+        entry_block: block0,
+        blocks: HashMap::from([
+            (block0, InstRange::new(Inst::new(0), Inst::new(1))),
+            (block1, InstRange::new(Inst::new(1), Inst::new(3))),
+        ]),
+        block_succs: HashMap::from([(block0, vec![block1])]),
+        block_preds: HashMap::from([(block1, vec![block0])]),
+        instructions: vec![brif_inst, assignv6, addv11, retv11],
+        num_values: 4, // v0, v1, v6, v11
+    };
+    let bad_values = regalloc2::run(&dummy_bad_values, &env, &options);
+    println!("bad_values: {bad_values:?}");
+
+    let options = regalloc2::RegallocOptions {
+        verbose_log: false,
+        validate_ssa: true,
+        algorithm: regalloc2::Algorithm::Ion,
+    };
+
+    // Check ion
+    let bad_block = regalloc2::run(&dummy_bad_block, &env, &options);
+    println!("bad_block: {bad_block:?}");
+    let bad_values = regalloc2::run(&dummy_bad_values, &env, &options);
+    println!("bad_values: {bad_values:?}");
 
     Ok(())
 }
