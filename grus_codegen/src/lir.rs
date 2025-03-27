@@ -74,6 +74,17 @@ use crate::codegen as cg;
 
       links:
         https://github.com/bytecodealliance/regalloc2/pull/170  On blockparams in branches.
+        Something with critical edges;
+          https://github.com/bytecodealliance/regalloc2/blob/925df1b4674435a9322e21912926a68749517861/src/cfg.rs#L79
+          https://en.wikipedia.org/wiki/Control-flow_graph#Special_edges
+
+        > A critical edge is an edge which is neither the only edge leaving its source block, nor the only edge entering
+        > its destination block. These edges must be split: a new block must be created in the middle of the edge, in
+        > order to insert computations on the edge without affecting any other edges.
+      Okay, that makes sense, lets just always split all branches into two blocks without arguments, and then put
+      the moves in those blocks... then jump to the next block without arguments, that way we don't ahve to worry about
+      any of this.
+
 */
 
 /*
@@ -82,13 +93,8 @@ Need to give blocks clear 'these are the input registers' to the block, currentl
 use cranelift_codegen::isa::CallConv;
 use log::*;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 struct BlockId(usize);
-impl BlockId {
-    pub fn from(v: usize) -> BlockId {
-        BlockId(v)
-    }
-}
 
 #[derive(Copy, Clone, Debug)]
 pub struct Inst(usize);
@@ -275,6 +281,8 @@ impl Block {
     }
 }
 
+use std::cell::RefCell;
+
 #[derive(Debug)]
 pub struct Function {
     blocks: Vec<Block>,
@@ -285,6 +293,9 @@ pub struct Function {
     call_convention: CallConv,
     fun: CraneliftIrFunction,
     fun_args: Vec<Value>,
+
+    block_counter: RefCell<usize>,
+    block_map: RefCell<HashMap<ir::Block, BlockId>>,
 }
 
 impl Function {
@@ -296,7 +307,27 @@ impl Function {
             entry_block: None,
             call_convention: CallConv::SystemV,
             fun: fun.clone(),
+            block_counter: Default::default(),
+            block_map: Default::default(),
         }
+    }
+
+    /// Get a block id, or if none, create a new one.
+    fn get_blockid(&self, original: Option<ir::Block>) -> BlockId {
+        let mut map = self.block_map.borrow_mut();
+        // Lookup if it already exists
+        if let Some(original_block_id) = &original {
+            if let Some(block_id) = map.get(&original_block_id) {
+                return *block_id;
+            }
+        }
+        // it doesn't exist, add it to the map and advance the index.
+        let v = BlockId(*self.block_counter.borrow());
+        if let Some(original) = original {
+            map.insert(original, v);
+        }
+        *self.block_counter.borrow_mut() += 1;
+        v
     }
 
     pub fn lirify(&mut self) {
@@ -315,7 +346,7 @@ impl Function {
         }
 
         for b in layout.blocks() {
-            let lirblockid = BlockId::from(b.as_u32() as usize);
+            let lirblockid = self.get_blockid(Some(b));
             let mut lirblock = Block::new(lirblockid);
 
             debug!("b: {b:?}");
@@ -327,11 +358,11 @@ impl Function {
 
             lirblock.block_succs = cfg
                 .succ_iter(b)
-                .map(|v| BlockId::from(v.as_u32() as usize))
+                .map(|v| self.get_blockid(Some(v)))
                 .collect();
             lirblock.block_preds = cfg
                 .pred_iter(b)
-                .map(|v| BlockId::from(v.block.as_u32() as usize))
+                .map(|v| self.get_blockid(Some(v.block)))
                 .collect();
 
             lirblock.block_params = dfg.block_params(b).iter().copied().collect();
@@ -379,7 +410,7 @@ impl Function {
         }
 
         let irentry = layout.entry_block().expect("should have entry block");
-        let entryblockid = BlockId::from(irentry.as_u32() as usize);
+        let entryblockid = self.get_blockid(Some(irentry));
         self.entry_block = Some(entryblockid);
     }
 
@@ -390,6 +421,8 @@ impl Function {
         let dfg = &self.fun.dfg;
         let type_of = |v: &ir::Value| dfg.value_type(*v);
         let _types_of = |v: &[ir::Value]| v.iter().map(|z| dfg.value_type(*z)).collect::<Vec<_>>();
+
+        let block_map = self.block_map.borrow().clone();
 
         for b in self.blocks.iter_mut() {
             for s in b.sections.iter_mut() {
@@ -522,9 +555,7 @@ impl Function {
                                 new_op(Op::Jcc(cg::JumpCondition::IsZero)).with_use(&use_args),
                             );*/
                             let block_true = BlockCall {
-                                block: BlockId::from(
-                                    blocks[0].block(&dfg.value_lists).as_u32() as usize
-                                ),
+                                block: block_map[&blocks[0].block(&dfg.value_lists)],
                                 params: blocks[0]
                                     .args_slice(&dfg.value_lists)
                                     .iter()
@@ -532,9 +563,7 @@ impl Function {
                                     .collect(),
                             };
                             let block_false = BlockCall {
-                                block: BlockId::from(
-                                    blocks[1].block(&dfg.value_lists).as_u32() as usize
-                                ),
+                                block: block_map[&blocks[1].block(&dfg.value_lists)],
                                 params: blocks[1]
                                     .args_slice(&dfg.value_lists)
                                     .iter()
