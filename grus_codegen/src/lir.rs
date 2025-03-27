@@ -414,8 +414,28 @@ impl Function {
         self.entry_block = Some(entryblockid);
     }
 
+    pub fn split_blocks(&mut self) {
+        /* If we encounter
+          brif v3, block1(v0), block2(v2)
+          ->
+          brif v3, block1_intermediate, block2_intermediate
+
+          block1_intermediate:
+            v8 = v0
+            jump block2(v8)
+
+          block2_intermediate:
+            v9 = v2
+            jump block2(v9)
+
+          How do we express jump with use's? Do they define? or do they use?
+          oh... regfun.branch_blockparams probably takes care of that?
+        */
+    }
+
     /// Lower IR instructions to partial machine instructions
     pub fn lower_first(&mut self) {
+        self.split_blocks();
         let new_op = InstructionData::new;
         use cg::{Op, Operand, Width};
         let dfg = &self.fun.dfg;
