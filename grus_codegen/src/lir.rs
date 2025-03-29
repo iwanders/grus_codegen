@@ -208,6 +208,12 @@ pub struct BrifData {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+pub struct JumpData {
+    block: BlockId,
+    params: Vec<Value>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 enum Special {
     /// Preamble at the beginning of the function
     ///
@@ -218,9 +224,13 @@ enum Special {
     ///
     /// Holds the values used to call the other branches.
     Brif(BrifData),
+    /// Jumps to another block.
+    ///
+    /// Holds the values used to call the other branches.
+    Jump(JumpData),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct Section {
     lir_inst: Vec<LirInst>,
     ir_inst: Vec<IrInst>,
@@ -252,6 +262,9 @@ impl Section {
     }
     pub fn is_preamble(&self) -> bool {
         self.special == Some(Special::Preamble)
+    }
+    pub fn is_branch(&self) -> bool {
+        matches!(self.special, Some(Special::Brif(_)))
     }
 }
 
@@ -296,6 +309,8 @@ pub struct Function {
 
     block_counter: RefCell<usize>,
     block_map: RefCell<HashMap<ir::Block, BlockId>>,
+
+    value_counter: RefCell<u32>,
 }
 
 impl Function {
@@ -309,7 +324,15 @@ impl Function {
             fun: fun.clone(),
             block_counter: Default::default(),
             block_map: Default::default(),
+            value_counter: Default::default(),
         }
+    }
+
+    fn new_value(&self) -> Value {
+        let current_counter = *self.value_counter.borrow();
+        let v = Value::from_u32(current_counter);
+        *self.value_counter.borrow_mut() += 1;
+        v
     }
 
     /// Get a block id, or if none, create a new one.
@@ -335,6 +358,14 @@ impl Function {
         let layout = &self.fun.stencil.layout;
 
         let cfg = cranelift_codegen::flowgraph::ControlFlowGraph::with_function(&self.fun);
+
+        // Collect all the Vregs
+        let all_values: Vec<Value> = dfg.values().collect();
+        let mut highest_value_counter = 0;
+        for v in all_values {
+            highest_value_counter = highest_value_counter.max(v.as_u32());
+        }
+        *(self.value_counter.borrow_mut()) = highest_value_counter;
 
         let ir_entry_block = self
             .fun
@@ -431,11 +462,128 @@ impl Function {
           How do we express jump with use's? Do they define? or do they use?
           oh... regfun.branch_blockparams probably takes care of that?
         */
+
+        struct BlockUpdate {
+            block_idx: usize,
+            section_idx: usize,
+            param_idx: usize,
+            remove_block_succs: Vec<BlockId>,
+            add_block_preds: Vec<BlockId>,
+            additional_block: Block,
+            call: BlockCall,
+        }
+
+        let mut new_blocks = vec![];
+        for (bi, b) in self.blocks.iter().enumerate() {
+            for (si, s) in b.sections.iter().enumerate() {
+                if !s.is_branch() {
+                    continue;
+                }
+                if let Some(z) = s.special.as_ref() {
+                    if let Special::Brif(data) = z {
+                        for (pi, bp) in data.params.iter().enumerate() {
+                            if bp.params.is_empty() {
+                                // lets just always do this.
+                                //continue;
+                            }
+                            let new_block_id = self.get_blockid(None);
+                            let mut new_block = Block::new(new_block_id);
+                            new_block.block_params = bp.params.clone();
+
+                            let mut new_values = vec![];
+                            // Now, add the moves.
+                            for p in bp.params.iter() {
+                                let new_value = self.new_value();
+                                new_values.push(new_value);
+
+                                /*for l in lirs {
+                                    let new_id = Inst(self.instdata.len());
+                                    self.instdata.push(l);
+                                    s.lir_inst.push(new_id);
+                                    s.is_lowered = true;
+                                }*/
+                                let instdata = InstructionData::new(cg::Op::Mov(cg::Width::W64))
+                                    .with_use(&[p.clone()])
+                                    .with_def(&[new_value]);
+                                let new_id = Inst(self.instdata.len());
+                                self.instdata.push(instdata);
+
+                                let new_section = Section {
+                                    lir_inst: vec![new_id],
+                                    is_lowered: true,
+                                    ..Default::default()
+                                };
+                                new_block.sections.push(new_section);
+                            }
+
+                            // Finally, insert the now branchless jump at the end of the section.
+
+                            let instdata = InstructionData::new(cg::Op::Nop);
+                            let new_id = Inst(self.instdata.len());
+                            self.instdata.push(instdata);
+                            let mut jump_section = Section {
+                                lir_inst: vec![new_id],
+                                is_lowered: true,
+                                ..Default::default()
+                            };
+                            jump_section.special = Some(Special::Jump(JumpData {
+                                block: new_block_id,
+                                params: new_values,
+                            }));
+                            new_block.sections.push(jump_section);
+
+                            let new_blockparam = BlockCall {
+                                block: new_block_id,
+                                params: vec![],
+                            };
+
+                            let update = BlockUpdate {
+                                block_idx: bi,
+                                section_idx: si,
+                                param_idx: pi,
+
+                                call: new_blockparam,
+                                additional_block: new_block,
+                                remove_block_succs: vec![bp.block],
+                                add_block_preds: vec![b.id],
+                            };
+
+                            new_blocks.push(update);
+                        }
+                        println!("Got branch, splitting things");
+                    }
+                }
+            }
+        }
+        for new_block in new_blocks {
+            let bi = new_block.block_idx;
+            let si = new_block.section_idx;
+            let pi = new_block.param_idx;
+            //let mut orig_section = &mut self.blocks[bi].sections[si];
+
+            let orig_block = &mut self.blocks[bi];
+            for rem in new_block.remove_block_succs {
+                if let Some(z) = orig_block.block_succs.iter().position(|a| a == &rem) {
+                    orig_block.block_succs.remove(z);
+                }
+            }
+            for new_pred in new_block.add_block_preds {
+                orig_block.block_preds.push(new_pred);
+            }
+
+            // Finally, replace the block call.
+            if let Some(v) = orig_block.sections[si].special.as_mut() {
+                if let Special::Brif(data) = v {
+                    data.params[pi] = new_block.call;
+                }
+            }
+            self.blocks.push(new_block.additional_block);
+        }
+        //self.blocks.extend(new_blocks);
     }
 
     /// Lower IR instructions to partial machine instructions
     pub fn lower_first(&mut self) {
-        self.split_blocks();
         let new_op = InstructionData::new;
         use cg::{Op, Operand, Width};
         let dfg = &self.fun.dfg;
@@ -616,6 +764,8 @@ impl Function {
                 }
             }
         }
+        // After that is done, we do a pass to split the brif blocks.
+        self.split_blocks();
     }
 
     pub fn prune(&mut self) {
@@ -1178,6 +1328,23 @@ impl RegWrapper {
                                             }
                                             block_values.push(this_call_values);
                                         }
+                                        branch_blockparam.insert(key, block_values);
+                                    }
+                                    Special::Jump(jump_data) => {
+                                        let key = (regblock, reg_inst);
+                                        let mut block_values = vec![];
+                                        let mut this_call_values = vec![];
+                                        for v in jump_data.params.iter() {
+                                            let vreg = value_info
+                                                .entry(*v)
+                                                .or_insert_with(|| {
+                                                    let regtype = RegClass::Int;
+                                                    VReg::new(v.as_u32() as usize, regtype)
+                                                })
+                                                .clone();
+                                            this_call_values.push(vreg);
+                                        }
+                                        block_values.push(this_call_values);
                                         branch_blockparam.insert(key, block_values);
                                     }
                                 }

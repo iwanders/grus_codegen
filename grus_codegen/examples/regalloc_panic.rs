@@ -36,7 +36,7 @@ impl Function for DummyFunction {
             self.blocks[&block]
         } else {
             println!("Don't have this block, returning a dummy range");
-            InstRange::new(Inst::new(0), Inst::new(1))
+            InstRange::new(Inst::new(0), Inst::new(0))
         }
     }
     fn block_succs(&self, block: regalloc2::Block) -> &[regalloc2::Block] {
