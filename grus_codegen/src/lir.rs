@@ -345,6 +345,10 @@ impl Function {
             }
         }
         // it doesn't exist, add it to the map and advance the index.
+        {
+            let mut counter = self.block_counter.borrow_mut();
+            *counter = (*counter).max(map.len());
+        }
         let v = BlockId(*self.block_counter.borrow());
         if let Some(original) = original {
             map.insert(original, v);
@@ -481,6 +485,7 @@ impl Function {
                 if !s.is_branch() {
                     continue;
                 }
+                todo!("need to make a decomposed brif struct lower the brif to jne, jump block0, jump block1");
                 if let Some(z) = s.special.as_ref() {
                     if let Special::Brif(data) = z {
                         for (pi, bp) in data.params.iter().enumerate() {
@@ -489,6 +494,7 @@ impl Function {
                                 //continue;
                             }
                             let new_block_id = self.get_blockid(None);
+                            println!("New block id: {new_block_id:?}");
                             let mut new_block = Block::new(new_block_id);
                             //new_block.block_params = bp.params.clone();
 
@@ -557,11 +563,14 @@ impl Function {
                             new_blocks.push(update);
                         }
                         println!("Got branch, splitting things");
+
+                        // Actually lower this...
                     }
                 }
             }
         }
         println!("New blocks; {new_blocks:?}");
+        let new_blocks = new_blocks.drain(..).rev().collect::<Vec<_>>();
         for new_block in new_blocks {
             let bi = new_block.block_idx;
             let si = new_block.section_idx;
@@ -576,6 +585,13 @@ impl Function {
             // Now we need to do two actions.
             // Remove the old destination.
             // Add the new destination.
+
+            // Also update the brifdata.
+            if let Some(ref mut special) = self.blocks[bi].sections[si].special.as_mut() {
+                if let Special::Brif(data) = special {
+                    data.params[pi].block = new_dest;
+                }
+            }
 
             // Remove the old destination from the successors.
             if let Some(old_dest_index) = self.blocks[bi]
@@ -608,7 +624,7 @@ impl Function {
 
             // Then, insert the new block just after the previous id block.
             if let Some(position) = self.blocks.iter().position(|z| z.id == orig_blockid) {
-                self.blocks.insert(position + 1, new_block.additional_block);
+                self.blocks.insert(position, new_block.additional_block);
             }
         }
         //self.blocks.extend(new_blocks);
@@ -798,6 +814,17 @@ impl Function {
         }
         // After that is done, we do a pass to split the brif blocks.
         self.split_blocks();
+
+        // Check that we don't have duplicate block ids.
+        {
+            let mut blocks: std::collections::HashSet<BlockId> = Default::default();
+            for b in self.blocks.iter() {
+                if blocks.contains(&b.id) {
+                    panic!("duplicate block id found in blocks");
+                }
+                blocks.insert(b.id);
+            }
+        }
     }
 
     pub fn prune(&mut self) {
