@@ -463,14 +463,16 @@ impl Function {
           oh... regfun.branch_blockparams probably takes care of that?
         */
 
+        #[derive(Debug)]
         struct BlockUpdate {
             block_idx: usize,
             section_idx: usize,
             param_idx: usize,
-            remove_block_succs: Vec<BlockId>,
-            add_block_preds: Vec<BlockId>,
+
+            original_blockid: BlockId,
             additional_block: Block,
             call: BlockCall,
+            dest_old_blockid: BlockId,
         }
 
         let mut new_blocks = vec![];
@@ -489,6 +491,9 @@ impl Function {
                             let new_block_id = self.get_blockid(None);
                             let mut new_block = Block::new(new_block_id);
                             new_block.block_params = bp.params.clone();
+
+                            new_block.block_succs.push(bp.block);
+                            new_block.block_preds.push(b.id);
 
                             let mut new_values = vec![];
                             // Now, add the moves.
@@ -544,8 +549,9 @@ impl Function {
 
                                 call: new_blockparam,
                                 additional_block: new_block,
-                                remove_block_succs: vec![bp.block],
-                                add_block_preds: vec![b.id],
+                                original_blockid: b.id,
+
+                                dest_old_blockid: bp.block,
                             };
 
                             new_blocks.push(update);
@@ -555,23 +561,45 @@ impl Function {
                 }
             }
         }
+        println!("New blocks; {new_blocks:?}");
         for new_block in new_blocks {
             let bi = new_block.block_idx;
             let si = new_block.section_idx;
             let pi = new_block.param_idx;
             //let mut orig_section = &mut self.blocks[bi].sections[si];
 
-            let orig_block = &mut self.blocks[bi];
-            for rem in new_block.remove_block_succs {
-                if let Some(z) = orig_block.block_succs.iter().position(|a| a == &rem) {
-                    orig_block.block_succs.remove(z);
-                }
+            //let orig_block = &mut self.blocks[bi];
+            let orig_blockid = new_block.original_blockid;
+            let new_dest = new_block.additional_block.id;
+            let old_dest = new_block.dest_old_blockid;
+
+            // Now we need to do two actions.
+            // Remove the old destination.
+            // Add the new destination.
+
+            // Remove the old destination from the successors.
+            if let Some(old_dest_index) = self.blocks[bi]
+                .block_succs
+                .iter()
+                .position(|i| *i == old_dest)
+            {
+                let orig_block = &mut self.blocks[bi];
+                orig_block.block_succs.remove(old_dest_index);
+                orig_block.block_succs.push(new_dest);
             }
-            for new_pred in new_block.add_block_preds {
-                orig_block.block_preds.push(new_pred);
+            if let Some(old_successor) = self.blocks.iter_mut().find(|b| b.id == old_dest) {
+                if let Some(old_dest_index) = old_successor
+                    .block_preds
+                    .iter()
+                    .position(|i| *i == old_dest)
+                {
+                    old_successor.block_preds.remove(old_dest_index);
+                }
+                old_successor.block_preds.push(new_dest);
             }
 
             // Finally, replace the block call.
+            let orig_block = &mut self.blocks[bi];
             if let Some(v) = orig_block.sections[si].special.as_mut() {
                 if let Special::Brif(data) = v {
                     data.params[pi] = new_block.call;
@@ -1245,9 +1273,29 @@ impl RegWrapper {
                         }
                         // If this is a branch, add the values used by the block calls as use operands.
                         if let Some(special) = &s.special {
-                            if let Special::Brif(data) = special {
-                                for b in data.params.iter() {
-                                    for branch_param in b.params.iter() {
+                            match &special {
+                                Special::Preamble => todo!(),
+                                Special::Brif(data) => {
+                                    for b in data.params.iter() {
+                                        for branch_param in b.params.iter() {
+                                            let valuetype = fun.dfg.value_type(*branch_param);
+                                            let regtype = if valuetype.is_int() {
+                                                RegClass::Int
+                                            } else {
+                                                RegClass::Float
+                                            };
+                                            let operand = RegOperand::new(
+                                                VReg::new(branch_param.as_u32() as usize, regtype),
+                                                regalloc2::OperandConstraint::Any,
+                                                regalloc2::OperandKind::Use,
+                                                regalloc2::OperandPos::Early,
+                                            );
+                                            operands.push(operand);
+                                        }
+                                    }
+                                }
+                                Special::Jump(jump_data) => {
+                                    for branch_param in jump_data.params.iter() {
                                         let valuetype = fun.dfg.value_type(*branch_param);
                                         let regtype = if valuetype.is_int() {
                                             RegClass::Int
@@ -1307,34 +1355,16 @@ impl RegWrapper {
 
                         // If it is a branch, add the data for this branch to the map that's used to lookup the branch
                         // parameters for the register allocation.
-                        if is_branch {
-                            if let Some(special) = s.special.as_ref() {
-                                match special {
-                                    Special::Preamble => {}
-                                    Special::Brif(brif_data) => {
-                                        let key = (regblock, reg_inst);
-                                        let mut block_values = vec![];
-                                        for b in brif_data.params.iter() {
-                                            let mut this_call_values = vec![];
-                                            for v in b.params.iter() {
-                                                let vreg = value_info
-                                                    .entry(*v)
-                                                    .or_insert_with(|| {
-                                                        let regtype = RegClass::Int;
-                                                        VReg::new(v.as_u32() as usize, regtype)
-                                                    })
-                                                    .clone();
-                                                this_call_values.push(vreg);
-                                            }
-                                            block_values.push(this_call_values);
-                                        }
-                                        branch_blockparam.insert(key, block_values);
-                                    }
-                                    Special::Jump(jump_data) => {
-                                        let key = (regblock, reg_inst);
-                                        let mut block_values = vec![];
+
+                        if let Some(special) = s.special.as_ref() {
+                            match special {
+                                Special::Preamble => {}
+                                Special::Brif(brif_data) => {
+                                    let key = (regblock, reg_inst);
+                                    let mut block_values = vec![];
+                                    for b in brif_data.params.iter() {
                                         let mut this_call_values = vec![];
-                                        for v in jump_data.params.iter() {
+                                        for v in b.params.iter() {
                                             let vreg = value_info
                                                 .entry(*v)
                                                 .or_insert_with(|| {
@@ -1345,8 +1375,25 @@ impl RegWrapper {
                                             this_call_values.push(vreg);
                                         }
                                         block_values.push(this_call_values);
-                                        branch_blockparam.insert(key, block_values);
                                     }
+                                    branch_blockparam.insert(key, block_values);
+                                }
+                                Special::Jump(jump_data) => {
+                                    let key = (regblock, reg_inst);
+                                    let mut block_values = vec![];
+                                    let mut this_call_values = vec![];
+                                    for v in jump_data.params.iter() {
+                                        let vreg = value_info
+                                            .entry(*v)
+                                            .or_insert_with(|| {
+                                                let regtype = RegClass::Int;
+                                                VReg::new(v.as_u32() as usize, regtype)
+                                            })
+                                            .clone();
+                                        this_call_values.push(vreg);
+                                    }
+                                    block_values.push(this_call_values);
+                                    branch_blockparam.insert(key, block_values);
                                 }
                             }
                         }
