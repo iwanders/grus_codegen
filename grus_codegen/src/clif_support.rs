@@ -223,6 +223,11 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
     lirfun.dump();
     let env = regmachine.to_env();
 
+    let reg_rows = crate::lir::write_regfunction(&reg_wrapper, &reg_wrapper);
+    for r in reg_rows {
+        println!("{r}");
+    }
+
     if let Some(regalloc_serialize_path) = write_regalloc_serialize {
         let serfun = regalloc2::serialize::SerializableFunction::new(&reg_wrapper, env.clone());
         use std::io::Write;

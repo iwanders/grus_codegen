@@ -605,7 +605,11 @@ impl Function {
                     data.params[pi] = new_block.call;
                 }
             }
-            self.blocks.push(new_block.additional_block);
+
+            // Then, insert the new block just after the previous id block.
+            if let Some(position) = self.blocks.iter().position(|z| z.id == orig_blockid) {
+                self.blocks.insert(position + 1, new_block.additional_block);
+            }
         }
         //self.blocks.extend(new_blocks);
     }
@@ -1592,18 +1596,18 @@ impl RegFunction for RegWrapper {
         self.block_insn[&block]
     }
     fn block_succs(&self, block: regalloc2::Block) -> &[regalloc2::Block] {
-        println!("block succ: {block:?}");
-        println!("all: {:?}", self.block_succs);
+        //println!("block succ: {block:?}");
+        //println!("all: {:?}", self.block_succs);
         &self.block_succs[&block]
     }
     fn block_preds(&self, block: regalloc2::Block) -> &[regalloc2::Block] {
-        println!("block pred: {block:?}");
-        println!("all: {:?}", self.block_preds);
+        //println!("block pred: {block:?}");
+        //println!("all: {:?}", self.block_preds);
         &self.block_preds[&block]
     }
     fn block_params(&self, block: regalloc2::Block) -> &[VReg] {
-        println!("block pred: {block:?}");
-        println!("blockparams: {:?}", self.block_params);
+        //println!("block pred: {block:?}");
+        //println!("blockparams: {:?}", self.block_params);
         if block == self.entry_block {
             return &[];
         }
@@ -1651,4 +1655,36 @@ impl grus_regalloc::svg::FunPrinter for RegWrapper {
         let _ = block;
         todo!()
     }
+}
+
+pub fn write_regfunction(
+    fun: &impl RegFunction,
+    printer: &impl grus_regalloc::svg::FunPrinter,
+) -> Vec<String> {
+    let mut rows = vec![];
+
+    let mut block_stack: std::collections::VecDeque<RegBlock> = Default::default();
+    block_stack.push_back(fun.entry_block());
+
+    while let Some(block) = block_stack.pop_front() {
+        // Block start:
+        let bparam = fun.block_params(block);
+
+        let joined = bparam
+            .iter()
+            .map(|z| format!("v{}", z.vreg()))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        rows.push(format!("block{:}({joined:})", block.raw_u32()));
+
+        // Instructions.
+        for inst in fun.block_insns(block).iter() {
+            rows.push(format!("{inst:?}  {}", printer.inst(inst)));
+        }
+
+        rows.push(format!("{}", ""));
+        block_stack.extend(fun.block_succs(block));
+    }
+    rows
 }
