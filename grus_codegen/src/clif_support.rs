@@ -220,6 +220,7 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
     lirfun.lower_first();
     let reg_wrapper = lirfun.reg_wrapper();
     println!("{lirfun:#?}");
+    lirfun.dump();
     let env = regmachine.to_env();
 
     if let Some(regalloc_serialize_path) = write_regalloc_serialize {

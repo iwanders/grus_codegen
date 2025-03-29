@@ -330,7 +330,7 @@ impl Function {
 
     fn new_value(&self) -> Value {
         let current_counter = *self.value_counter.borrow();
-        let v = Value::from_u32(current_counter);
+        let v = Value::from_u32(current_counter + 1);
         *self.value_counter.borrow_mut() += 1;
         v
     }
@@ -490,7 +490,7 @@ impl Function {
                             }
                             let new_block_id = self.get_blockid(None);
                             let mut new_block = Block::new(new_block_id);
-                            new_block.block_params = bp.params.clone();
+                            //new_block.block_params = bp.params.clone();
 
                             new_block.block_succs.push(bp.block);
                             new_block.block_preds.push(b.id);
@@ -523,7 +523,7 @@ impl Function {
 
                             // Finally, insert the now branchless jump at the end of the section.
 
-                            let instdata = InstructionData::new(cg::Op::Nop);
+                            let instdata = InstructionData::new(cg::Op::Jump);
                             let new_id = Inst(self.instdata.len());
                             self.instdata.push(instdata);
                             let mut jump_section = Section {
@@ -532,7 +532,7 @@ impl Function {
                                 ..Default::default()
                             };
                             jump_section.special = Some(Special::Jump(JumpData {
-                                block: new_block_id,
+                                block: bp.block,
                                 params: new_values,
                             }));
                             new_block.sections.push(jump_section);
@@ -1064,6 +1064,26 @@ impl Function {
         }
         v
     }
+
+    pub fn dump(&self) {
+        for b in self.blocks.iter() {
+            println!("{:?}  ({:?})", b.id, b.block_params);
+            for (si, s) in b.sections.iter().enumerate() {
+                println!(" s{si}  {:?}", s.special);
+                if s.is_lowered() {
+                    for inst in s.lir_inst.iter() {
+                        let instdata = &self.instdata[inst.0];
+                        println!("   {instdata:?}");
+                    }
+                } else {
+                    for inst in s.ir_inst.iter() {
+                        let instdata = self.fun.dfg.insts[*inst];
+                        println!("   {instdata:?}");
+                    }
+                }
+            }
+        }
+    }
 }
 
 // use cranelift_codegen::ir::Inst as IrInst;
@@ -1234,6 +1254,48 @@ impl RegWrapper {
                         last_inst = Some(reg_inst);
                         println!("assigning {last_inst:?}");
 
+                        if let Some(special) = s.special.as_ref() {
+                            match special {
+                                Special::Preamble => {}
+                                Special::Brif(brif_data) => {
+                                    let key = (regblock, reg_inst);
+                                    let mut block_values = vec![];
+                                    for b in brif_data.params.iter() {
+                                        let mut this_call_values = vec![];
+                                        for v in b.params.iter() {
+                                            let vreg = value_info
+                                                .entry(*v)
+                                                .or_insert_with(|| {
+                                                    let regtype = RegClass::Int;
+                                                    VReg::new(v.as_u32() as usize, regtype)
+                                                })
+                                                .clone();
+                                            this_call_values.push(vreg);
+                                        }
+                                        block_values.push(this_call_values);
+                                    }
+                                    //branch_blockparam.insert(key, block_values);
+                                }
+                                Special::Jump(jump_data) => {
+                                    let key = (regblock, reg_inst);
+                                    let mut block_values = vec![];
+                                    let mut this_call_values = vec![];
+                                    for v in jump_data.params.iter() {
+                                        let vreg = value_info
+                                            .entry(*v)
+                                            .or_insert_with(|| {
+                                                let regtype = RegClass::Int;
+                                                VReg::new(v.as_u32() as usize, regtype)
+                                            })
+                                            .clone();
+                                        this_call_values.push(vreg);
+                                    }
+                                    block_values.push(this_call_values);
+                                    //branch_blockparam.insert(key, block_values);
+                                }
+                            }
+                        }
+
                         let is_ret = data.operation.is_return();
                         let is_branch = data.operation.is_branch();
                         let description = data.simple_string();
@@ -1332,7 +1394,8 @@ impl RegWrapper {
                         }
 
                         let is_ret = instdata.opcode().is_return();
-                        let is_branch = instdata.opcode().is_branch();
+                        let is_branch = instdata.opcode().is_branch()
+                            || matches!(s.special, Some(Special::Brif(_)) | Some(Special::Jump(_)));
                         let mut w = cranelift_codegen::write::PlainWriter {};
                         let mut description = String::new();
                         w.write_instruction(
@@ -1540,7 +1603,7 @@ impl RegFunction for RegWrapper {
     }
     fn block_params(&self, block: regalloc2::Block) -> &[VReg] {
         println!("block pred: {block:?}");
-        println!("blcokparams: {:?}", self.block_params);
+        println!("blockparams: {:?}", self.block_params);
         if block == self.entry_block {
             return &[];
         }

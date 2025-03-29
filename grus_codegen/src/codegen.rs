@@ -67,6 +67,11 @@ pub enum Op {
     ///
     /// Does nothing except advance the EIP register.
     Nop,
+
+    /// Jump, Somewhere
+    ///
+    ///
+    Jump,
 }
 
 impl Op {
@@ -80,6 +85,7 @@ impl Op {
             Op::Test => 2..=2,
             Op::Jcc(_) => 0..=999,
             Op::Nop => 0..=0,
+            Op::Jump => 0..=0,
         }
     }
     pub fn is_return(&self) -> bool {
@@ -89,7 +95,11 @@ impl Op {
         }
     }
     pub fn is_branch(&self) -> bool {
-        false
+        match self {
+            Op::Jcc(_) => true,
+            Op::Jump => true,
+            _ => false,
+        }
     }
 }
 
@@ -350,6 +360,9 @@ impl Instruction {
                 todo!()
             }
             Op::Jcc(_) => {
+                todo!()
+            }
+            Op::Jump => {
                 todo!()
             }
             Op::Nop => {
