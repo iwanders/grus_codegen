@@ -526,6 +526,7 @@ impl Function {
                             let new_block = &mut block_update.additional_block;
                             new_block.block_succs.insert(bp.block);
                             new_block.block_preds.insert(b.id);
+                            block_update.call.params.clear();
 
                             let mut new_values = vec![];
                             // Now, add the moves.
