@@ -1103,9 +1103,6 @@ impl Function {
 
         for b in self.blocks.iter() {
             for s in b.sections.iter() {
-                if s.is_preamble() {
-                    continue;
-                }
                 for i in s.lir_inst.iter() {
                     debug!("assembling: {:?}", self.instdata[i.0]);
                     let mut z = self.instdata[i.0].assemble().unwrap();

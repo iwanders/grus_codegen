@@ -1,5 +1,5 @@
 use regalloc2::{
-    Block, Function, Inst, InstRange, MachineEnv, Operand, Output, PReg, PRegSet, RegClass, VReg,
+    Block, Function, Inst, InstRange, MachineEnv, Operand, PReg, PRegSet, RegClass, VReg,
 };
 
 use std::collections::HashMap;
@@ -32,7 +32,7 @@ impl Function for DummyFunction {
     }
     fn block_insns(&self, block: regalloc2::Block) -> InstRange {
         println!("block: {block:?}");
-        if let Some(r) = self.blocks.get(&block) {
+        if let Some(_r) = self.blocks.get(&block) {
             self.blocks[&block]
         } else {
             println!("Don't have this block, returning a dummy range");
@@ -53,7 +53,7 @@ impl Function for DummyFunction {
             &[]
         }
     }
-    fn block_params(&self, block: regalloc2::Block) -> &[VReg] {
+    fn block_params(&self, _block: regalloc2::Block) -> &[VReg] {
         &[]
     }
     fn is_ret(&self, reginst: regalloc2::Inst) -> bool {
@@ -64,9 +64,9 @@ impl Function for DummyFunction {
     }
     fn branch_blockparams(
         &self,
-        block: regalloc2::Block,
-        inst: regalloc2::Inst,
-        succs_index: usize,
+        _block: regalloc2::Block,
+        _inst: regalloc2::Inst,
+        _succs_index: usize,
     ) -> &[VReg] {
         &[]
     }

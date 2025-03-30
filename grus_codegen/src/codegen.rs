@@ -269,7 +269,7 @@ impl Instruction {
         let lower = r.index() & 0b111;
         rex |= width.rex_bit();
         let mut z: OpcodeVec = opcode.iter().copied().collect();
-        let mut lb = z.last_mut().unwrap();
+        let lb = z.last_mut().unwrap();
         *lb |= lower;
         *lb |= match modspec {
             ModSpec::Memory => 0b00,
@@ -403,9 +403,7 @@ impl Instruction {
                             Self::addr_reg(r, &[0xF7, 0], width, ModSpec::RegisterRegister)?;
                         v.push(rex.into());
                         v.extend(opcode.iter());
-                        //*v.last_mut().unwrap() |= 0b11 << 6; // Hack the MOD byte.
                         v.extend((b as u32).to_le_bytes());
-                        v.push(INT3);
                     }
                     _ => todo!(),
                 }
@@ -415,6 +413,7 @@ impl Instruction {
             }
             Op::Jump => {
                 println!("there should be something here");
+                todo!()
             }
             Op::Nop => {
                 todo!()
