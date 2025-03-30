@@ -138,6 +138,9 @@ impl Reg {
     }
 }
 
+pub const CALLING_CONVENTION_REGISTERS: [Reg; 6] =
+    [Reg::EDI, Reg::ESI, Reg::EDX, Reg::ECX, Reg::R8, Reg::R9];
+
 #[derive(Debug, Copy, Clone)]
 pub enum Operand {
     /// A direct register.

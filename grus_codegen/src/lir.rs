@@ -940,9 +940,34 @@ impl Function {
         for b in self.blocks.iter_mut() {
             for s in b.sections.iter_mut() {
                 if s.is_preamble() {
-                    todo!(
-                        "do something with the preamble nops, something with calling convention?"
-                    );
+                    // Skipping the function prologue and epilogue for now, but we still need to do some moves to
+                    // make the calling convention work out.
+                    // We only need a preamble once we need to use stack variables... though technically we have the
+                    // red zone https://en.wikipedia.org/wiki/Red_zone_(computing) because we don't yet support calling
+                    // other functions.
+                    /*
+                      pub const EAX: Reg = Reg(0b000);
+                      pub const ECX: Reg = Reg(0b001);
+                      pub const EDX: Reg = Reg(0b010);
+                      pub const EBX: Reg = Reg(0b011);
+                    */
+                    let arg_count = self.fun_args.len();
+                    if arg_count > 6 {
+                        todo!("handle functions with more than 6 arguments");
+                    }
+
+                    for (arg_i, input_reg) in cg::CALLING_CONVENTION_REGISTERS
+                        .iter()
+                        .take(arg_count)
+                        .enumerate()
+                    {
+                        // Replace the NOP with a move.
+                        let instructiondata = &mut self.instdata[s.lir_inst[arg_i].0];
+                        println!("instructiondata: {instructiondata:?}");
+                        instructiondata.operation = cg::Op::Mov(Width::W64);
+                        instructiondata.use_operands = vec![cg::Operand::Reg(*input_reg).into()];
+                        println!("instructiondata: {instructiondata:?}");
+                    }
                 }
                 for linst in s.lir_inst.iter() {
                     let instdata = &mut self.instdata[linst.0];

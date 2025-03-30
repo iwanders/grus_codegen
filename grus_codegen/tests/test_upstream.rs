@@ -27,7 +27,7 @@ fn test_upstream() -> Result<(), anyhow::Error> {
     // d.push("filetests");
 
     let test_settings = grus_codegen::clif_support::TestSettings {
-        register_allocator: grus_codegen::RegisterAllocator::Regalloc2Ion,
+        register_allocator: grus_codegen::RegisterAllocator::Winged,
         register_machine: grus_codegen::RegisterMachine::Int4,
         fun_index: None,
         write_svg: None,

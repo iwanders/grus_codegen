@@ -12,6 +12,13 @@ fn attempt_two() -> ResultReturn {
 
     let isa = X86Isa::new();
 
+    let test_settings = grus_codegen::clif_support::TestSettings {
+        register_allocator: grus_codegen::RegisterAllocator::Winged,
+        register_machine: grus_codegen::RegisterMachine::Int4,
+        fun_index: None,
+        write_svg: None,
+    };
+
     println!("isa.triple(): {}", &isa.triple());
     // println!("isa: {}", &isa);
 
@@ -23,7 +30,7 @@ fn attempt_two() -> ResultReturn {
     let fun = fun.drain(..).next().unwrap();
     println!("fun: {fun:?}");
 
-    let res = isa.compile_function(&fun)?;
+    let res = isa.compile_function(&fun, &test_settings.to_compile_settings())?;
 
     let mut module = ObjectModule::new();
     let id = module.declare_function("foo", Linkage::Export, &fun.signature)?;
