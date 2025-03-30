@@ -17,14 +17,32 @@ use cranelift_reader::{Comparison, TestFile};
 use grus_module::{Linkage, ObjectModule};
 use log::{info, trace, warn};
 
-pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
+use crate::{RegisterAllocator, RegisterMachine};
+
+pub struct TestSettings {
+    pub register_allocator: RegisterAllocator,
+    pub register_machine: RegisterMachine,
+    pub fun_index: Option<usize>,
+    pub write_svg: Option<std::path::PathBuf>,
+}
+impl TestSettings {
+    pub fn to_compile_settings(&self) -> crate::isa::CompileSettings {
+        crate::isa::CompileSettings {
+            register_allocator: self.register_allocator,
+            register_machine: self.register_machine,
+            write_svg: self.write_svg.clone(),
+        }
+    }
+}
+
+pub fn process_test_file(test_file: &TestFile, settings: &TestSettings) -> Result<bool> {
     // First, compile all functions.
     let isa = crate::X86Isa::new();
 
     let mut module = ObjectModule::new();
     let mut funids = vec![];
     for (fun, _detail) in test_file.functions.iter() {
-        let res = isa.compile_function(fun)?;
+        let res = isa.compile_function(fun, &settings.to_compile_settings())?;
         let id = module.declare_named_function(Linkage::Export, fun)?;
         module.define_function_bytes(id, 0, &res.buffer)?;
         funids.push(id);
@@ -117,7 +135,6 @@ pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
 
                     match comparison {
                         Comparison::Equals => {
-                            // args[1] + 3;
                             for (index, expected) in args.iter().enumerate() {
                                 let return_type = f.signature.returns[index];
                                 let returned =
@@ -152,62 +169,28 @@ pub fn process_test_file(test_file: &TestFile) -> Result<bool> {
     }
 }
 
-pub fn test_files<P: AsRef<std::path::Path> + std::fmt::Debug>(files: &[P]) -> Result<bool> {
+pub fn test_files<P: AsRef<std::path::Path> + std::fmt::Debug>(
+    files: &[P],
+    settings: &TestSettings,
+) -> Result<bool> {
     let mut all_passed = true;
     for f in files {
         let f = std::fs::read_to_string(f).context(format!("failed to open {f:?}"))?;
         let test_file = cranelift_reader::parse_test(&f, Default::default())?;
-        all_passed &= process_test_file(&test_file)?;
+        all_passed &= process_test_file(&test_file, settings)?;
     }
     Ok(all_passed)
 }
 
-use serde::{Deserialize, Serialize};
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub enum RegisterMachine {
-    Int2,
-    Int4,
-    Int8,
-}
-impl RegisterMachine {
-    pub fn to_env(&self) -> regalloc2::MachineEnv {
-        match *self {
-            RegisterMachine::Int2 => grus_regalloc::simple_int_machine(1, 0),
-            RegisterMachine::Int4 => grus_regalloc::simple_int_machine(4, 0),
-            RegisterMachine::Int8 => grus_regalloc::simple_int_machine(8, 0),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, Default)]
-pub enum RegisterAllocator {
-    #[default]
-    Winged,
-    Regalloc2Ion,
-    Regalloc2Fastalloc,
-}
-impl RegisterAllocator {
-    pub fn to_regalloc2_algorithm(&self) -> Option<regalloc2::Algorithm> {
-        match *self {
-            RegisterAllocator::Winged => None,
-            RegisterAllocator::Regalloc2Ion => Some(regalloc2::Algorithm::Ion),
-            RegisterAllocator::Regalloc2Fastalloc => Some(regalloc2::Algorithm::Fastalloc),
-        }
-    }
-}
-
 pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
     file: &P,
-    fun_index: usize,
-    regmachine: RegisterMachine,
-    allocator: &RegisterAllocator,
-    write_svg: &Option<std::path::PathBuf>,
-    write_regalloc_serialize: &Option<std::path::PathBuf>,
+    settings: &TestSettings,
 ) -> Result<()> {
     let f = std::fs::read_to_string(file).context(format!("failed to open {file:?}"))?;
     let test_file = cranelift_reader::parse_test(&f, Default::default())?;
-    // all_passed &= process_test_file(&test_file)?;
+
+    let fun_index = settings.fun_index.unwrap_or(0);
+    let regmachine = settings.register_machine;
 
     let function = test_file
         .functions
@@ -228,6 +211,7 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
         println!("{r}");
     }
 
+    /*
     if let Some(regalloc_serialize_path) = write_regalloc_serialize {
         let serfun = regalloc2::serialize::SerializableFunction::new(&reg_wrapper, env.clone());
         use std::io::Write;
@@ -236,20 +220,24 @@ pub fn reg_alloc<P: AsRef<std::path::Path> + std::fmt::Debug>(
         serde_json::to_writer(&mut writer, &serfun)?;
         writer.flush()?;
     }
+    */
 
-    let reg_outputs = match allocator {
+    let reg_outputs = match settings.register_allocator {
         RegisterAllocator::Winged => grus_regalloc::run(&reg_wrapper, &env)?,
         RegisterAllocator::Regalloc2Ion | RegisterAllocator::Regalloc2Fastalloc => {
             let options = regalloc2::RegallocOptions {
                 verbose_log: false,
                 validate_ssa: true,
-                algorithm: allocator.to_regalloc2_algorithm().unwrap(),
+                algorithm: settings
+                    .register_allocator
+                    .to_regalloc2_algorithm()
+                    .unwrap(),
             };
             regalloc2::run(&reg_wrapper, &env, &options)?
         }
     };
     println!("reg_outputs: {reg_outputs:#?}");
-    if let Some(svg_output_path) = write_svg {
+    if let Some(svg_output_path) = &settings.write_svg {
         let options = Default::default();
         let document = grus_regalloc::svg::register_document(
             &reg_wrapper,

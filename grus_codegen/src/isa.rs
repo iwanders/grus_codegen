@@ -27,6 +27,14 @@ pub struct CompiledCode {
     // pub frame_size: usize,
 }
 
+use crate::{RegisterAllocator, RegisterMachine};
+
+pub struct CompileSettings {
+    pub register_allocator: RegisterAllocator,
+    pub register_machine: RegisterMachine,
+    pub write_svg: Option<std::path::PathBuf>,
+}
+
 impl X86Isa {
     pub fn name(&self) -> &'static str {
         "X86Isa"
@@ -35,7 +43,11 @@ impl X86Isa {
         &self.triple
     }
 
-    pub fn compile_function(&self, func: &Function) -> Result<CompiledCode, anyhow::Error> {
+    pub fn compile_function(
+        &self,
+        func: &Function,
+        settings: &CompileSettings,
+    ) -> Result<CompiledCode, anyhow::Error> {
         let _ = func;
 
         // Okay, so now we get a stencil, that has a dfg, and we need to output instructions for that.
@@ -73,14 +85,41 @@ impl X86Isa {
 
         https://docs.rs/cranelift-codegen/0.116.1/cranelift_codegen/ir/instructions/enum.InstructionData.html
         */
+        let env = settings.register_machine.to_env();
 
         let mut lirfun = crate::lir::Function::from_ir(&func);
         lirfun.lirify();
         lirfun.lower_first();
         let reg_wrapper = lirfun.reg_wrapper();
         println!("{lirfun:#?}");
-        let reg_outputs =
-            grus_regalloc::run(&reg_wrapper, &grus_regalloc::simple_int_machine(4, 0))?;
+
+        let reg_outputs = match settings.register_allocator {
+            RegisterAllocator::Winged => grus_regalloc::run(&reg_wrapper, &env)?,
+            RegisterAllocator::Regalloc2Ion | RegisterAllocator::Regalloc2Fastalloc => {
+                let options = regalloc2::RegallocOptions {
+                    verbose_log: false,
+                    validate_ssa: true,
+                    algorithm: settings
+                        .register_allocator
+                        .to_regalloc2_algorithm()
+                        .unwrap(),
+                };
+                regalloc2::run(&reg_wrapper, &env, &options)?
+            }
+        };
+        println!("reg_outputs: {reg_outputs:#?}");
+        if let Some(svg_output_path) = &settings.write_svg {
+            let options = Default::default();
+            let document = grus_regalloc::svg::register_document(
+                &reg_wrapper,
+                &reg_outputs,
+                &env,
+                &options,
+                &reg_wrapper,
+            );
+            grus_regalloc::svg::svg::save(svg_output_path, &document)?;
+        }
+
         // let reg_outputs =
         // regalloc2::run(&reg_wrapper, &grus_regalloc::simple_int_machine(4, 0), &Default::default())?;
 
