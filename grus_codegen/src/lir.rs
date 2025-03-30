@@ -92,6 +92,7 @@ Need to give blocks clear 'these are the input registers' to the block, currentl
 */
 use cranelift_codegen::isa::CallConv;
 use log::*;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 struct BlockId(usize);
@@ -274,8 +275,8 @@ struct Block {
     id: BlockId,
 
     // block_param:
-    block_preds: Vec<BlockId>,
-    block_succs: Vec<BlockId>,
+    block_preds: HashSet<BlockId>,
+    block_succs: HashSet<BlockId>,
 
     block_params: Vec<Value>,
 }
@@ -283,8 +284,8 @@ impl Block {
     fn new(id: BlockId) -> Self {
         Self {
             sections: vec![],
-            block_succs: vec![],
-            block_preds: vec![],
+            block_succs: Default::default(),
+            block_preds: Default::default(),
             block_params: vec![],
             id,
         }
@@ -523,8 +524,8 @@ impl Function {
                         for (pi, bp) in data.params.iter().enumerate() {
                             let block_update = &mut brif_update.calls[pi];
                             let new_block = &mut block_update.additional_block;
-                            new_block.block_succs.push(bp.block);
-                            new_block.block_preds.push(b.id);
+                            new_block.block_succs.insert(bp.block);
+                            new_block.block_preds.insert(b.id);
 
                             let mut new_values = vec![];
                             // Now, add the moves.
@@ -601,27 +602,18 @@ impl Function {
                 // Now we need to do two actions.
                 // Remove the old destination.
                 // Add the new destination.
+                let original_dest_block =
+                    self.blocks.iter_mut().find(|z| z.id == old_dest).unwrap();
+                original_dest_block.block_preds.remove(&containing_blockid);
+                original_dest_block.block_preds.insert(new_dest);
 
-                // Remove the old destination from the successors.
-                if let Some(old_dest_index) = self.blocks[bi]
-                    .block_succs
-                    .iter()
-                    .position(|i| *i == old_dest)
-                {
-                    let orig_block = &mut self.blocks[bi];
-                    orig_block.block_succs.remove(old_dest_index);
-                    orig_block.block_succs.push(new_dest);
-                }
-                if let Some(old_successor) = self.blocks.iter_mut().find(|b| b.id == old_dest) {
-                    if let Some(old_dest_index) = old_successor
-                        .block_preds
-                        .iter()
-                        .position(|i| *i == old_dest)
-                    {
-                        old_successor.block_preds.remove(old_dest_index);
-                    }
-                    old_successor.block_preds.push(new_dest);
-                }
+                let original_source_block = self
+                    .blocks
+                    .iter_mut()
+                    .find(|z| z.id == containing_blockid)
+                    .unwrap();
+                original_source_block.block_succs.remove(&old_dest);
+                original_source_block.block_succs.insert(new_dest);
 
                 // Finally, replace the block call.
                 let orig_block = &mut self.blocks[bi];
@@ -1111,7 +1103,10 @@ impl Function {
 
     pub fn dump(&self) {
         for b in self.blocks.iter() {
-            println!("{:?}  ({:?})", b.id, b.block_params);
+            println!(
+                "{:?}  ({:?})  (pred: {:?}) (succ: {:?})",
+                b.id, b.block_params, b.block_preds, b.block_succs
+            );
             for (si, s) in b.sections.iter().enumerate() {
                 println!(" s{si}  {:?}", s.special);
                 if s.is_lowered() {
@@ -1126,6 +1121,7 @@ impl Function {
                     }
                 }
             }
+            println!();
         }
     }
 }
@@ -1137,8 +1133,6 @@ use regalloc2::Inst as RegInst;
 use regalloc2::Operand as RegOperand;
 use regalloc2::Output as RegOutput;
 use regalloc2::{InstRange, PRegSet, RegClass, VReg};
-
-use std::collections::HashMap;
 
 #[derive(Debug)]
 enum LirOrIrInst {
