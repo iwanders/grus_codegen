@@ -324,7 +324,7 @@ mod winged {
             let ops = fun.inst_operands(insn);
             for op in ops {
                 if op.pos() != regalloc2::OperandPos::Early {
-                    continue;
+                    //    continue;
                 }
                 println!("entry instr Op: {op:?}, pos: {:?}", op.pos());
                 if op.kind() == OperandKind::Def {

@@ -92,6 +92,7 @@ impl X86Isa {
         lirfun.lower_first();
         let reg_wrapper = lirfun.reg_wrapper();
         println!("{lirfun:#?}");
+        lirfun.dump();
 
         let reg_outputs = match settings.register_allocator {
             RegisterAllocator::Winged => grus_regalloc::run(&reg_wrapper, &env)?,
@@ -123,7 +124,7 @@ impl X86Isa {
         // let reg_outputs =
         // regalloc2::run(&reg_wrapper, &grus_regalloc::simple_int_machine(4, 0), &Default::default())?;
 
-        lirfun.apply_regalloc(&reg_wrapper, &reg_outputs);
+        lirfun.apply_regalloc(&reg_wrapper, &reg_outputs, &settings.register_machine);
         lirfun.lower_second();
         // lirfun.patch_returns();
         lirfun.patch_operations();

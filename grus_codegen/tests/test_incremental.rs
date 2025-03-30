@@ -15,7 +15,7 @@ fn test_incremental() -> Result<(), anyhow::Error> {
     ];
 
     let test_settings = grus_codegen::clif_support::TestSettings {
-        register_allocator: grus_codegen::RegisterAllocator::Winged,
+        register_allocator: grus_codegen::RegisterAllocator::Regalloc2Ion,
         register_machine: grus_codegen::RegisterMachine::Int4,
         fun_index: None,
         write_svg: None,

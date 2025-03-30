@@ -849,44 +849,29 @@ impl Function {
         self.instdata.get(inst.0)
     }
 
-    pub fn apply_regalloc(&mut self, wrapper: &RegWrapper, regs: &RegOutput) {
+    pub fn apply_regalloc(
+        &mut self,
+        wrapper: &RegWrapper,
+        regs: &RegOutput,
+        register_machine: &crate::RegisterMachine,
+    ) {
         use cg::Reg;
 
-        // Call convention is kinda hardcoded on the regalloc side...
-        // reg0 is arg 0; EDI, Diane's
-        // reg1 is arg 1; ESI, Silk
-        // reg2 is arg 2; EDX, Dress
-        // reg3 is arg 3; ECX, Costs
-        // reg4 is arg 4; r8?, 8
-        // reg5 is arg 5; r9?, 9$
-
-        // And regalloc uses 'n' registers from 0..n.
-        // So we need to map those to something.
-
-        let regmap = [
-            Reg::EDI, // PReg(0),
-            Reg::ESI, // PReg(1),
-            Reg::EDX, // PReg(2),
-            Reg::ECX, // PReg(3),
-                      // Reg::R8,  // PReg(4),
-                      // Reg::R9,  // PReg(5),
-                      // Reg::R10, Reg::R11, Reg::R12, Reg::R13, Reg::R14, Reg::R15
-        ];
-        let rg2x = |p: regalloc2::PReg| regmap[p.index()];
+        let rg2x = |p: regalloc2::PReg| register_machine.to_cg_reg(p.index());
 
         // Loop must match the order in the wrapper creator.
         for (reginst, info) in wrapper.inst_info.iter() {
-            println!("regs: {regs:#?}");
+            //println!("regs: {regs:#?}");
             match info.inst {
                 LirOrIrInst::Lir(inst) => {
                     let inst_data = &mut self.instdata[inst.0];
                     if !inst_data.has_virtuals() {
                         continue;
                     }
-                    println!("@ {reginst:?} inst_data: {inst_data:#?}");
+                    //println!("@ {reginst:?} inst_data: {inst_data:#?}");
                     let allocs_args = regs.inst_allocs(*reginst);
                     let use_allocs = &allocs_args[0..];
-                    println!("use_allocs.len: {}", use_allocs.len());
+                    //println!("use_allocs.len: {}", use_allocs.len());
                     let mut index = 0;
                     // let use_allocs = &allocs_args[0..inst_data.use_operands.len()];
                     for cont in [&mut inst_data.use_operands, &mut inst_data.def_operands] {
@@ -908,7 +893,7 @@ impl Function {
                     }
                 }
                 LirOrIrInst::Ir(inst) => {
-                    println!("reginst: {reginst:?}");
+                    //println!("reginst: {reginst:?}");
                     let allocs_args = regs.inst_allocs(*reginst);
                     let allocs = &allocs_args[0..];
 
