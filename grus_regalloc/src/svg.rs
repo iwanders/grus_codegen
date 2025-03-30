@@ -24,7 +24,7 @@ pub struct VisualisationOptions {
 impl Default for VisualisationOptions {
     fn default() -> Self {
         VisualisationOptions {
-            row_height: 10.0,
+            row_height: 12.5,
             dpi: 100.0,
             font_size: 1.0,
             row_code_width: 200.0,

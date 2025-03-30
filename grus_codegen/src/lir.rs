@@ -771,13 +771,13 @@ impl Function {
                             debug!("Brif : {arg:#?}  {blocks:#?}");
                             // Model the branch as an instruction that reads one value... ignoring the fact that it
                             // writes values used by the branch for now.
-                            /*lirs.push(new_op(Op::Test).with_use::<LirOperand>(&[
+                            lirs.push(new_op(Op::Test).with_use::<LirOperand>(&[
                                 use_ir[0].into(),
                                 LirOperand::Machine(Operand::Immediate(0)).into(),
                             ]));
                             // Collect the arguments that we'll end up using...
                             // The second lower will split this into the two blocks, so here it is a single block.
-                            lirs.push(
+                            /*lirs.push(
                                 new_op(Op::Jcc(cg::JumpCondition::IsZero)).with_use(&use_args),
                             );*/
                             let block_true = BlockCall {
@@ -1227,8 +1227,10 @@ impl RegWrapper {
             for s in b.sections.iter() {
                 if s.is_lowered() {
                     // if it is lowered, we operate on the LIR.
-                    for inst in s.lir_inst.iter() {
+                    let insts_in_section = s.lir_inst.len();
+                    for (inst_i, inst) in s.lir_inst.iter().enumerate() {
                         let data = lirfun.inst_data(*inst).expect("ill formed function");
+                        let is_last_inst = inst_i == insts_in_section - 1;
                         let mut operands = vec![];
                         for z in data.use_operands.iter() {
                             match z {
@@ -1289,15 +1291,34 @@ impl RegWrapper {
 
                         let reg_inst = RegInst::new(inst_info.len());
 
-                        if let Some(special) = s.special.as_ref() {
-                            match special {
-                                Special::Preamble => {}
-                                Special::Brif(brif_data) => {
-                                    let key = (regblock, reg_inst);
-                                    let mut block_values = vec![];
-                                    for b in brif_data.params.iter() {
+                        if is_last_inst {
+                            if let Some(special) = s.special.as_ref() {
+                                match special {
+                                    Special::Preamble => {}
+                                    Special::Brif(brif_data) => {
+                                        let key = (regblock, reg_inst);
+                                        let mut block_values = vec![];
+                                        for b in brif_data.params.iter() {
+                                            let mut this_call_values = vec![];
+                                            for v in b.params.iter() {
+                                                let vreg = value_info
+                                                    .entry(*v)
+                                                    .or_insert_with(|| {
+                                                        let regtype = RegClass::Int;
+                                                        VReg::new(v.as_u32() as usize, regtype)
+                                                    })
+                                                    .clone();
+                                                this_call_values.push(vreg);
+                                            }
+                                            block_values.push(this_call_values);
+                                        }
+                                        branch_blockparam.insert(key, block_values);
+                                    }
+                                    Special::Jump(jump_data) => {
+                                        let key = (regblock, reg_inst);
+                                        let mut block_values = vec![];
                                         let mut this_call_values = vec![];
-                                        for v in b.params.iter() {
+                                        for v in jump_data.params.iter() {
                                             let vreg = value_info
                                                 .entry(*v)
                                                 .or_insert_with(|| {
@@ -1308,25 +1329,8 @@ impl RegWrapper {
                                             this_call_values.push(vreg);
                                         }
                                         block_values.push(this_call_values);
+                                        branch_blockparam.insert(key, block_values);
                                     }
-                                    branch_blockparam.insert(key, block_values);
-                                }
-                                Special::Jump(jump_data) => {
-                                    let key = (regblock, reg_inst);
-                                    let mut block_values = vec![];
-                                    let mut this_call_values = vec![];
-                                    for v in jump_data.params.iter() {
-                                        let vreg = value_info
-                                            .entry(*v)
-                                            .or_insert_with(|| {
-                                                let regtype = RegClass::Int;
-                                                VReg::new(v.as_u32() as usize, regtype)
-                                            })
-                                            .clone();
-                                        this_call_values.push(vreg);
-                                    }
-                                    block_values.push(this_call_values);
-                                    branch_blockparam.insert(key, block_values);
                                 }
                             }
                         }
@@ -1340,25 +1344,29 @@ impl RegWrapper {
                         last_inst = Some(reg_inst);
                         println!("assigning {last_inst:?}");
 
-                        let is_ret = data.operation.is_return();
-                        let is_branch = data.operation.is_branch();
+                        let is_ret = data.operation.is_return() && is_last_inst;
+                        let is_branch = data.operation.is_branch() && is_last_inst;
                         let mut description = data.simple_string();
                         if let Some(special) = s.special.as_ref() {
                             match special {
                                 Special::Preamble => {}
                                 Special::Brif(brif_data) => {
-                                    description += &format!(
-                                        " -> {}",
-                                        brif_data
-                                            .params
-                                            .iter()
-                                            .map(|v| format!("{:?}", v.block))
-                                            .collect::<Vec<String>>()
-                                            .join(", ")
-                                    );
+                                    if is_last_inst {
+                                        description += &format!(
+                                            " -> {}",
+                                            brif_data
+                                                .params
+                                                .iter()
+                                                .map(|v| format!("{:?}", v.block))
+                                                .collect::<Vec<String>>()
+                                                .join(", ")
+                                        );
+                                    }
                                 }
                                 Special::Jump(jump_data) => {
-                                    description += &format!(" -> {:?}", jump_data.block);
+                                    if is_last_inst {
+                                        description += &format!(" -> {:?}", jump_data.block);
+                                    }
                                 }
                             }
                         }
