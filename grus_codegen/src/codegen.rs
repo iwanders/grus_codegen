@@ -72,6 +72,11 @@ pub enum Op {
     ///
     ///
     Jump,
+
+    /// Interrupt 3
+    ///
+    /// Generate breakpoint trap.
+    Int3,
 }
 
 impl Op {
@@ -86,6 +91,7 @@ impl Op {
             Op::Jcc(_) => 0..=999,
             Op::Nop => 0..=0,
             Op::Jump => 0..=0,
+            Op::Int3 => 0..=0,
         }
     }
     pub fn is_return(&self) -> bool {
@@ -209,6 +215,17 @@ impl Width {
 
 pub type OpcodeVec = ArrayVec<u8, 3>;
 
+// These are here because i tis sometimes helpful to insert one of these during debugging.
+const RETN: u8 = 0xC3;
+const INT3: u8 = 0xCC;
+
+pub enum ModSpec {
+    Memory,           // 0b00
+    MemoryDisp8,      // 0b01
+    MemoryDisp32,     // 0b10
+    RegisterRegister, // 0b11,
+}
+
 impl Instruction {
     pub fn op(op: Op, operands: &[Operand]) -> Self {
         Self {
@@ -237,7 +254,12 @@ impl Instruction {
     }
 
     // Fig 2-7, 2.2.1.1 of 325383-sdm-vol-2abcd-dec-24.pdf
-    fn addr_reg(r: Reg, opcode: &[u8], width: Width) -> Result<(Rex, OpcodeVec), CodegenError> {
+    fn addr_reg(
+        r: Reg,
+        opcode: &[u8],
+        width: Width,
+        modspec: ModSpec,
+    ) -> Result<(Rex, OpcodeVec), CodegenError> {
         let mut rex: u8 = 0b0100 << 4;
         if r.index() > 0b1111 {
             return Err(CodegenError::InvalidRegister { reg: r });
@@ -247,7 +269,14 @@ impl Instruction {
         let lower = r.index() & 0b111;
         rex |= width.rex_bit();
         let mut z: OpcodeVec = opcode.iter().copied().collect();
-        *z.last_mut().unwrap() |= lower;
+        let mut lb = z.last_mut().unwrap();
+        *lb |= lower;
+        *lb |= match modspec {
+            ModSpec::Memory => 0b00,
+            ModSpec::MemoryDisp8 => 0b01,
+            ModSpec::MemoryDisp32 => 0b10,
+            ModSpec::RegisterRegister => 0b11,
+        } << 6;
 
         Ok((Rex(rex), z))
     }
@@ -294,7 +323,7 @@ impl Instruction {
                     }
                     (Operand::Reg(r), Operand::Immediate(b)) => {
                         // Use register is in opcode. MOV 16: 'B8+ rw iw', 32: 'B8+ rd id', 64: 'REX.W + B8+ rd io'
-                        let (rex, opcode) = Self::addr_reg(r, &[0xB8], width)?;
+                        let (rex, opcode) = Self::addr_reg(r, &[0xB8], width, ModSpec::Memory)?;
                         v.push(rex.into());
                         v.extend(opcode.iter());
                         v.extend(b.to_le_bytes());
@@ -356,7 +385,6 @@ impl Instruction {
                 }
             }
             Op::Return => {
-                const RETN: u8 = 0xC3;
                 v.push(RETN);
             }
             Op::Test(width) => {
@@ -370,10 +398,14 @@ impl Instruction {
                         if width == Width::W8 {
                             todo!(); // something special with AH, BH,CH, DH
                         }
-                        let (rex, opcode) = Self::addr_reg(r, &[0xF7, 0], width)?;
+
+                        let (rex, opcode) =
+                            Self::addr_reg(r, &[0xF7, 0], width, ModSpec::RegisterRegister)?;
                         v.push(rex.into());
                         v.extend(opcode.iter());
-                        v.extend(b.to_le_bytes());
+                        //*v.last_mut().unwrap() |= 0b11 << 6; // Hack the MOD byte.
+                        v.extend((b as u32).to_le_bytes());
+                        v.push(INT3);
                     }
                     _ => todo!(),
                 }
@@ -386,6 +418,9 @@ impl Instruction {
             }
             Op::Nop => {
                 todo!()
+            }
+            Op::Int3 => {
+                v.push(INT3);
             }
         }
         Ok(v)
