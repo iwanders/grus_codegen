@@ -192,7 +192,11 @@ impl InstructionData {
         let def_string = joined(&self.def_operands);
         let use_string = joined(&self.use_operands);
         //let use_string = self.use_operands.iter().map(|z| format!("{z:?}")).join(" ");
-        format!("{}  = {:?} {}", def_string, self.operation, use_string)
+        if self.def_operands.is_empty() {
+            format!("{:?} {}", self.operation, use_string)
+        } else {
+            format!("{} = {:?} {}", def_string, self.operation, use_string)
+        }
     }
 }
 

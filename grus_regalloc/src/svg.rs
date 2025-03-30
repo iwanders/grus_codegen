@@ -182,9 +182,15 @@ pub fn register_document(
     let mut block_stack: std::collections::VecDeque<RegBlock> = Default::default();
     block_stack.push_back(fun.entry_block());
 
+    let mut visited: std::collections::HashSet<_> = Default::default();
+
     while let Some(block) = block_stack.pop_front() {
         // Block start:
         let bparam = fun.block_params(block);
+
+        if visited.contains(&block.index()) {
+            continue;
+        }
 
         let joined = bparam
             .iter()
@@ -199,6 +205,7 @@ pub fn register_document(
             alloc: vec![],
         };
         grid.rows.push(block_start_row);
+        visited.insert(block.index());
 
         // Instructions.
         for inst in fun.block_insns(block).iter() {
