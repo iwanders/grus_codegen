@@ -56,7 +56,7 @@ pub enum Op {
     ///
     /// TEST r/m16, imm16   TEST r/m32, imm32   TEST r/m64, imm64
     /// TEST r/m16, r16   TEST r/m32, r32   TEST r/m64, r64
-    Test,
+    Test(Width),
 
     /// JCC - Jump if Condition is Met
     ///
@@ -82,7 +82,7 @@ impl Op {
             Op::ISub(_) => 2..=2,
             Op::IMul(_) => 2..=2, // heh, technically 1..=3... with 3 only with intermediate, 1 for eax
             Op::Return => 0..=0,
-            Op::Test => 2..=2,
+            Op::Test(_) => 2..=2,
             Op::Jcc(_) => 0..=999,
             Op::Nop => 0..=0,
             Op::Jump => 0..=0,
@@ -359,14 +359,30 @@ impl Instruction {
                 const RETN: u8 = 0xC3;
                 v.push(RETN);
             }
-            Op::Test => {
-                todo!()
+            Op::Test(width) => {
+                let dest = self.operands[0];
+                let src = self.operands[1];
+                match (dest, src) {
+                    (Operand::Reg(_r), Operand::Reg(_b)) => {
+                        todo!()
+                    }
+                    (Operand::Reg(r), Operand::Immediate(b)) => {
+                        if width == Width::W8 {
+                            todo!(); // something special with AH, BH,CH, DH
+                        }
+                        let (rex, opcode) = Self::addr_reg(r, &[0xF7, 0], width)?;
+                        v.push(rex.into());
+                        v.extend(opcode.iter());
+                        v.extend(b.to_le_bytes());
+                    }
+                    _ => todo!(),
+                }
             }
             Op::Jcc(_) => {
                 todo!()
             }
             Op::Jump => {
-                todo!()
+                println!("there should be something here");
             }
             Op::Nop => {
                 todo!()

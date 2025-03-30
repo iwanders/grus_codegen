@@ -771,7 +771,7 @@ impl Function {
                             debug!("Brif : {arg:#?}  {blocks:#?}");
                             // Model the branch as an instruction that reads one value... ignoring the fact that it
                             // writes values used by the branch for now.
-                            lirs.push(new_op(Op::Test).with_use::<LirOperand>(&[
+                            lirs.push(new_op(Op::Test(Width::W64)).with_use::<LirOperand>(&[
                                 use_ir[0].into(),
                                 LirOperand::Machine(Operand::Immediate(0)).into(),
                             ]));
@@ -1036,7 +1036,7 @@ impl Function {
                         } => {
                             error!("ir_regs: {:#?}", s.ir_regs);
 
-                            lirs.push(new_op(Op::Test).with_use(&[
+                            lirs.push(new_op(Op::Test(Width::W64)).with_use(&[
                                 Operand::Reg(s.ir_regs[ii][0]),
                                 Operand::Immediate(0),
                             ]));
