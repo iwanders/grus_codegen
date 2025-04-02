@@ -101,16 +101,21 @@ struct BlockId(usize);
 pub struct Inst(usize);
 use Inst as LirInst;
 
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+pub struct ProgramPoint(usize);
+
 #[derive(Copy, Clone, Debug)]
 pub enum LirOperand {
     Virtual(Value),
     Machine(cg::Operand),
+    ProgramPoint(ProgramPoint),
 }
 impl LirOperand {
     fn simple_string(&self) -> String {
         match self {
             LirOperand::Virtual(value) => format!("{value:?}"),
             LirOperand::Machine(operand) => format!("{operand:?}"),
+            LirOperand::ProgramPoint(point) => format!("{point:?}"),
         }
     }
 }
@@ -172,6 +177,9 @@ impl InstructionData {
                     LirOperand::Machine(r) => opv.push(*r),
                     LirOperand::Virtual(_) => {
                         todo!()
+                    }
+                    LirOperand::ProgramPoint(p) => {
+                        todo!("handle program points: {p:?}")
                     }
                 }
             }
@@ -302,6 +310,11 @@ impl Block {
 use std::cell::RefCell;
 
 #[derive(Debug)]
+enum CodePosition {
+    BlockStart(BlockId),
+}
+
+#[derive(Debug)]
 pub struct Function {
     blocks: Vec<Block>,
     entry_block: Option<BlockId>,
@@ -314,6 +327,8 @@ pub struct Function {
 
     block_counter: RefCell<usize>,
     block_map: RefCell<HashMap<ir::Block, BlockId>>,
+
+    program_points: RefCell<HashMap<ProgramPoint, CodePosition>>,
 
     value_counter: RefCell<u32>,
 }
@@ -330,6 +345,7 @@ impl Function {
             block_counter: Default::default(),
             block_map: Default::default(),
             value_counter: Default::default(),
+            program_points: Default::default(),
         }
     }
 
@@ -360,6 +376,13 @@ impl Function {
         }
         *self.block_counter.borrow_mut() += 1;
         v
+    }
+
+    fn new_position<T: Into<CodePosition>>(&mut self, v: T) -> ProgramPoint {
+        let mut map = self.program_points.borrow_mut();
+        let new_point = ProgramPoint(map.len());
+        map.insert(new_point, v.into());
+        new_point
     }
 
     pub fn lirify(&mut self) {
@@ -1265,6 +1288,7 @@ impl RegWrapper {
                                         }
                                     }
                                 }
+                                LirOperand::ProgramPoint(_) => {}
                             }
                         }
                         for z in data.def_operands.iter() {
@@ -1293,6 +1317,7 @@ impl RegWrapper {
                                         }
                                     }
                                 }
+                                LirOperand::ProgramPoint(_) => {}
                             }
                         }
 

@@ -70,7 +70,7 @@ pub enum Op {
 
     /// Jump, Somewhere
     ///
-    ///
+    /// Relative offset from current instruction position.
     Jump,
 
     /// Interrupt 3
@@ -90,7 +90,7 @@ impl Op {
             Op::Test(_) => 2..=2,
             Op::Jcc(_) => 0..=999,
             Op::Nop => 0..=0,
-            Op::Jump => 0..=0,
+            Op::Jump => 1..=1,
             Op::Int3 => 0..=0,
         }
     }
