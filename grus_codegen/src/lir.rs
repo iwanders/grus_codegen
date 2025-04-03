@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
+#![allow(irrefutable_let_patterns)]
 use cranelift_codegen::ir::Function as CraneliftIrFunction;
 use cranelift_codegen::ir::Inst as IrInst;
 use cranelift_codegen::ir::InstructionData as IrInstructionData;
@@ -151,6 +152,12 @@ impl InstructionData {
             use_operands: vec![],
         }
     }
+    pub fn operands_iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut LirOperand> {
+        self.def_operands
+            .iter_mut()
+            .chain(self.use_operands.iter_mut())
+    }
+
     pub fn with_use<T: Into<LirOperand> + Copy>(self, ops: &[T]) -> Self {
         Self {
             operation: self.operation,
@@ -322,6 +329,38 @@ enum CodePosition {
 impl From<BlockId> for CodePosition {
     fn from(v: BlockId) -> CodePosition {
         CodePosition::BlockStart(v)
+    }
+}
+
+// The anchor is in the rear.
+// -----------------P-------------Q----------|end
+// We track points by distance from point to end
+// From P to Q should be positive.
+// P->Q would be (P <-> End) - (Q <-> End)
+#[derive(Debug, Default)]
+struct CodePointTracker {
+    offsets: HashMap<ProgramPoint, usize>,
+}
+impl CodePointTracker {
+    pub fn add_blockstart(&mut self, f: &Function, b: BlockId, offset: usize) {
+        let point_map = f.program_points.borrow();
+        for (k, v) in point_map.iter() {
+            if let CodePosition::BlockStart(needle) = &v {
+                if b == *needle {
+                    self.offsets.insert(*k, offset);
+                }
+            }
+        }
+    }
+    pub fn offset(&self, p: ProgramPoint) -> usize {
+        *self
+            .offsets
+            .get(&p)
+            .expect(&format!("failed to find program point {p:?}"))
+    }
+    pub fn relative(&self, p: ProgramPoint, current_pos: usize) -> i64 {
+        let o = self.offset(p) as i64;
+        current_pos as i64 - o
     }
 }
 
@@ -1115,14 +1154,25 @@ impl Function {
     pub fn assemble(&self) -> Vec<u8> {
         let mut v = vec![];
 
-        todo!("hotstart: keep track of codepoint positions from the rear here.");
+        let mut tracker = CodePointTracker::default();
+        let mut dist_from_rear = 0;
 
         // Build the function from the rear, that way we know for sure that all code points have been encountered.
         for b in self.blocks.iter().rev() {
+            tracker.add_blockstart(&self, b.id, dist_from_rear);
             for s in b.sections.iter().rev() {
                 for i in s.lir_inst.iter().rev() {
                     debug!("assembling: {:?}", self.instdata[i.0]);
-                    let z = self.instdata[i.0].assemble().unwrap();
+                    let mut instdata_copy = self.instdata[i.0].clone();
+                    for op in instdata_copy.operands_iter_mut() {
+                        if let LirOperand::ProgramPoint(p) = op {
+                            let offset = tracker.relative(*p, dist_from_rear);
+                            *op = LirOperand::Machine(cg::Operand::Immediate(offset));
+                        }
+                    }
+                    println!("instdata_copy: {instdata_copy:?}");
+                    let z = instdata_copy.assemble().unwrap();
+                    dist_from_rear += z.len();
                     v.push(z);
                 }
             }
