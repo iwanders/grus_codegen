@@ -1009,7 +1009,7 @@ impl Function {
                     let instdata = &mut self.instdata[linst.0];
                     match instdata.operation {
                         // Only things to do for jne, we need to split that into the actual blocks.
-                        cg::Op::Jcc(jump_condition) => {
+                        cg::Op::Jcc(_jump_condition) => {
                             // nothing here anymore.
                         }
                         _ => {}
@@ -1115,16 +1115,26 @@ impl Function {
     pub fn assemble(&self) -> Vec<u8> {
         let mut v = vec![];
 
-        for b in self.blocks.iter() {
-            for s in b.sections.iter() {
-                for i in s.lir_inst.iter() {
+        todo!("hotstart: keep track of codepoint positions from the rear here.");
+
+        // Build the function from the rear, that way we know for sure that all code points have been encountered.
+        for b in self.blocks.iter().rev() {
+            for s in b.sections.iter().rev() {
+                for i in s.lir_inst.iter().rev() {
                     debug!("assembling: {:?}", self.instdata[i.0]);
-                    let mut z = self.instdata[i.0].assemble().unwrap();
-                    v.append(&mut z);
+                    let z = self.instdata[i.0].assemble().unwrap();
+                    v.push(z);
                 }
             }
         }
-        v
+
+        // Finally, reverse the assembled instructions, and out falls the function.
+        let mut fun: Vec<u8> = vec![];
+        for machine_inst in v.drain(..).rev() {
+            fun.extend(machine_inst);
+        }
+
+        fun
     }
 
     pub fn dump(&self) {
