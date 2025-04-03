@@ -130,6 +130,11 @@ impl From<cg::Operand> for LirOperand {
     }
 }
 
+impl From<ProgramPoint> for LirOperand {
+    fn from(v: ProgramPoint) -> LirOperand {
+        LirOperand::ProgramPoint(v)
+    }
+}
 #[derive(Clone, Debug)]
 pub struct InstructionData {
     pub operation: cg::Op,
@@ -309,9 +314,15 @@ impl Block {
 
 use std::cell::RefCell;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 enum CodePosition {
     BlockStart(BlockId),
+}
+
+impl From<BlockId> for CodePosition {
+    fn from(v: BlockId) -> CodePosition {
+        CodePosition::BlockStart(v)
+    }
 }
 
 #[derive(Debug)]
@@ -378,10 +389,17 @@ impl Function {
         v
     }
 
-    fn new_position<T: Into<CodePosition>>(&mut self, v: T) -> ProgramPoint {
+    /// Create a new program point.
+    fn new_position<T: Into<CodePosition>>(&self, v: T) -> ProgramPoint {
         let mut map = self.program_points.borrow_mut();
         let new_point = ProgramPoint(map.len());
-        map.insert(new_point, v.into());
+        let new_pos: CodePosition = v.into();
+        for (k, v) in map.iter() {
+            if *v == new_pos {
+                return *k;
+            }
+        }
+        map.insert(new_point, new_pos);
         new_point
     }
 
@@ -520,6 +538,9 @@ impl Function {
                 if let Some(z) = s.special.as_ref() {
                     if let Special::Brif(data) = z {
                         // Initialise the brif update struct.
+                        let (new_true_block_id, new_false_block_id) =
+                            { (self.get_blockid(None), self.get_blockid(None)) };
+
                         let mut brif_update = BrifUpdate {
                             block_idx: bi,
                             section_idx: si,
@@ -527,9 +548,8 @@ impl Function {
                             calls: [
                                 BlockUpdate {
                                     additional_block: {
-                                        let new_block_id = self.get_blockid(None);
-                                        println!("New block id: {new_block_id:?}");
-                                        let new_block = Block::new(new_block_id);
+                                        println!("New block id: {new_true_block_id:?}");
+                                        let new_block = Block::new(new_true_block_id);
                                         new_block
                                     },
                                     call: data.params[0].clone(),
@@ -537,9 +557,8 @@ impl Function {
                                 },
                                 BlockUpdate {
                                     additional_block: {
-                                        let new_block_id = self.get_blockid(None);
-                                        println!("New block id: {new_block_id:?}");
-                                        let new_block = Block::new(new_block_id);
+                                        println!("New block id: {new_false_block_id:?}");
+                                        let new_block = Block::new(new_false_block_id);
                                         new_block
                                     },
                                     call: data.params[1].clone(),
@@ -576,8 +595,10 @@ impl Function {
                             }
 
                             // Finally, insert the now branchless jump at the end of the section.
-
-                            let instdata = InstructionData::new(cg::Op::Jump);
+                            // Collect the program point to the original section.
+                            let dest_point = self.new_position(bp.block);
+                            let instdata =
+                                InstructionData::new(cg::Op::Jump).with_use(&[dest_point]);
                             let new_id = Inst(self.instdata.len());
                             self.instdata.push(instdata);
                             let mut jump_section = Section {
@@ -611,11 +632,18 @@ impl Function {
 
             self.blocks[bi].sections[si].is_lowered = true;
 
+            let dest_uses = vec![
+                self.new_position(brif_update.calls[0].additional_block.id)
+                    .into(),
+                self.new_position(brif_update.calls[1].additional_block.id)
+                    .into(),
+            ];
+
             let new_id = Inst(self.instdata.len());
             let l = InstructionData {
-                operation: cg::Op::Jump,
+                operation: cg::Op::Jcc(cg::JumpCondition::IsZero),
                 def_operands: vec![],
-                use_operands: vec![],
+                use_operands: dest_uses,
             };
             self.instdata.push(l);
 
@@ -982,44 +1010,7 @@ impl Function {
                     match instdata.operation {
                         // Only things to do for jne, we need to split that into the actual blocks.
                         cg::Op::Jcc(jump_condition) => {
-                            let _ = jump_condition;
-                            // Need to know what blocks this relates to, and what registers we got assigned there.
-                            error!("instdata: {:#?}", instdata);
-                            // The test is already done, so we only need to make jump and movs to the block destinations.
-                            // Obtain the IR brif.
-                            let branch_true_args;
-                            let branch_true_block;
-                            let branch_false_args;
-                            let branch_false_block;
-                            if let ir::InstructionData::Brif {
-                                opcode: _,
-                                arg: _,
-                                blocks,
-                            } = self.fun.dfg.insts[s.ir_inst[0]]
-                            {
-                                branch_true_args =
-                                    blocks[0].args_slice(&self.fun.dfg.value_lists).len();
-                                branch_true_block = blocks[0].block(&self.fun.dfg.value_lists);
-                                branch_false_args =
-                                    blocks[1].args_slice(&self.fun.dfg.value_lists).len();
-                                branch_false_block = blocks[0].block(&self.fun.dfg.value_lists);
-                            } else {
-                                panic!("could not find brif for jcc");
-                            }
-                            // Now... we need to handle the setup of the block we jump to.
-                            // Two sections, jump over the first if false.
-                            //   Section A:
-                            //     Setup to jump into the true block
-                            //     <At end here, jump to true block>
-                            //   Section B:
-                            //     Setup to jump into the false block
-                            //     <At end here, jump to false block>
-                            let _ = branch_true_args;
-                            let _ = branch_true_block;
-                            let _ = branch_false_args;
-                            let _ = branch_false_block;
-                            error!("Should we have ir regs here?: {:?}", s.ir_regs);
-                            todo!("the block doesn't specify into which registers block args go? How do we reconcile this?")
+                            // nothing here anymore.
                         }
                         _ => {}
                     }
