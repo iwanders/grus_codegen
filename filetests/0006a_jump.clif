@@ -1,0 +1,17 @@
+test run
+test compile
+target x86_64
+
+function %jump_to_block(i64, i64) -> i64 system_v {
+
+block0(v0: i64, v1: i64):
+  v2 = iadd v0, v1
+  jump block1
+block1:
+  v3 = iconst.i64 1
+  v4 = iadd v3, v2
+  return v4
+}
+
+; run: %jump_to_block(0, 0) == 1
+; run: %jump_to_block(3, 3) == 7

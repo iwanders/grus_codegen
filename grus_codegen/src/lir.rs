@@ -680,7 +680,7 @@ impl Function {
 
             let new_id = Inst(self.instdata.len());
             let l = InstructionData {
-                operation: cg::Op::Jcc(cg::JumpCondition::IsZero),
+                operation: cg::Op::Jcc(cg::JumpCondition::IfNotEqual),
                 def_operands: vec![],
                 use_operands: dest_uses,
             };
@@ -1044,14 +1044,32 @@ impl Function {
                         println!("instructiondata: {instructiondata:?}");
                     }
                 }
-                for linst in s.lir_inst.iter() {
-                    let instdata = &mut self.instdata[linst.0];
-                    match instdata.operation {
-                        // Only things to do for jne, we need to split that into the actual blocks.
-                        cg::Op::Jcc(_jump_condition) => {
-                            // nothing here anymore.
-                        }
-                        _ => {}
+                println!("section: {s:?}");
+
+                // Up to this point, jcc points towards to program points...
+                // For the code generation is may only have one jump.
+                // So we need to rewrite jcc(test) (dest1, dest2)
+                // to
+                // jcc test -> dest1
+                // jump -> dest2
+                // Jcc instructions are _ALWAYS_ at the end of the block, by definition
+                // so we can just append the secondary jump at the end, and change jcc to have one
+                // program point operand.
+                // So here we handle jccs at the end of the block and add instructions we need
+                if let Some(inst) = s.lir_inst.last().copied() {
+                    let last_inst = self.instdata[inst.0].clone();
+                    if let cg::Op::Jcc(jump_cond) = last_inst.operation {
+                        // First, replace the last instruction with an instruction that jumps to dest1.
+                        let new_id = Inst(self.instdata.len());
+                        let l = new_op(Op::Jcc(jump_cond)).with_use(&[last_inst.use_operands[0]]);
+                        self.instdata.push(l);
+                        *s.lir_inst.last_mut().unwrap() = new_id;
+
+                        // Else, jump to two.
+                        let new_id = Inst(self.instdata.len());
+                        let l = new_op(Op::Jump).with_use(&[last_inst.use_operands[1]]);
+                        s.lir_inst.push(new_id);
+                        self.instdata.push(l);
                     }
                 }
 

@@ -26,8 +26,10 @@ pub enum CodegenError {
 
 #[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Copy, Clone)]
 pub enum JumpCondition {
-    /// Jump if ZF==0.
-    IsZero,
+    /// Jump if ZF == 0.
+    IfNotEqual,
+    /// Jump if ZF != 0.
+    IfEqual,
 }
 
 /// x86 instructions
@@ -88,7 +90,7 @@ impl Op {
             Op::IMul(_) => 2..=2, // heh, technically 1..=3... with 3 only with intermediate, 1 for eax
             Op::Return => 0..=0,
             Op::Test(_) => 2..=2,
-            Op::Jcc(_) => 0..=999,
+            Op::Jcc(_) => 1..=1,
             Op::Nop => 0..=0,
             Op::Jump => 1..=1,
             Op::Int3 => 0..=0,
@@ -408,15 +410,27 @@ impl Instruction {
                     _ => todo!(),
                 }
             }
-            Op::Jcc(_) => {
-                //todo!()
-                println!("something here");
-                v.push(INT3);
+            Op::Jcc(t) => {
+                let offset = self.operands[0];
+                let opcode = match t {
+                    JumpCondition::IfEqual => {
+                        const JUMP_NEAR_IF_NOT_EQUAL_ZF_EQ_0_REL32: [u8; 2] = [0x0F, 0x85];
+                        JUMP_NEAR_IF_NOT_EQUAL_ZF_EQ_0_REL32
+                    }
+                    JumpCondition::IfNotEqual => {
+                        const JUMP_NEAR_IF_NOT_EQUAL_ZF_NE_0_REL32: [u8; 2] = [0x0F, 0x84];
+                        JUMP_NEAR_IF_NOT_EQUAL_ZF_NE_0_REL32
+                    }
+                };
+                if let Operand::Immediate(value) = offset {
+                    v.extend(opcode);
+                    v.extend((value as i32).to_le_bytes());
+                }
             }
             Op::Jump => {
-                let src = self.operands[0];
+                let offset = self.operands[0];
                 const JUMP_REL32: u8 = 0xE9;
-                if let Operand::Immediate(value) = src {
+                if let Operand::Immediate(value) = offset {
                     v.push(JUMP_REL32);
                     v.extend((value as i32).to_le_bytes());
                 }
