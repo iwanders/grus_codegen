@@ -1159,7 +1159,6 @@ impl Function {
 
         // Build the function from the rear, that way we know for sure that all code points have been encountered.
         for b in self.blocks.iter().rev() {
-            tracker.add_blockstart(&self, b.id, dist_from_rear);
             for s in b.sections.iter().rev() {
                 for i in s.lir_inst.iter().rev() {
                     debug!("assembling: {:?}", self.instdata[i.0]);
@@ -1167,6 +1166,7 @@ impl Function {
                     for op in instdata_copy.operands_iter_mut() {
                         if let LirOperand::ProgramPoint(p) = op {
                             let offset = tracker.relative(*p, dist_from_rear);
+
                             *op = LirOperand::Machine(cg::Operand::Immediate(offset));
                         }
                     }
@@ -1176,6 +1176,8 @@ impl Function {
                     v.push(z);
                 }
             }
+            // Only when we reach the end of the sections in the block, do we find the block start position.
+            tracker.add_blockstart(&self, b.id, dist_from_rear);
         }
 
         // Finally, reverse the assembled instructions, and out falls the function.

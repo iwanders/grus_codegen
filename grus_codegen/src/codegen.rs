@@ -409,11 +409,17 @@ impl Instruction {
                 }
             }
             Op::Jcc(_) => {
-                todo!()
+                //todo!()
+                println!("something here");
+                v.push(INT3);
             }
             Op::Jump => {
-                println!("there should be something here");
-                todo!()
+                let src = self.operands[0];
+                const JUMP_REL32: u8 = 0xE9;
+                if let Operand::Immediate(value) = src {
+                    v.push(JUMP_REL32);
+                    v.extend((value as i32).to_le_bytes());
+                }
             }
             Op::Nop => {
                 todo!()
