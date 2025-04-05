@@ -681,7 +681,7 @@ impl Function {
 
             let new_id = Inst(self.instdata.len());
             let l = InstructionData {
-                operation: cg::Op::Jcc(cg::JumpCondition::IfNotEqual),
+                operation: cg::Op::Jcc(cg::JumpCondition::IfEqual),
                 def_operands: vec![],
                 use_operands: dest_uses,
             };
@@ -864,9 +864,9 @@ impl Function {
                             // writes values used by the branch for now.
                             lirs.push(new_op(Op::Test(Width::W64)).with_use::<LirOperand>(&[
                                 use_ir[0].into(),
-                                LirOperand::Machine(Operand::Immediate(0)).into(),
+                                LirOperand::Machine(Operand::Immediate(i64::MAX)).into(),
                             ]));
-                            todo!("never go into the other branch, is test right for value != 0 ");
+
                             // Collect the arguments that we'll end up using...
                             // The second lower will split this into the two blocks, so here it is a single block.
                             /*lirs.push(
