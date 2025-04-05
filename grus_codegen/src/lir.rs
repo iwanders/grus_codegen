@@ -606,22 +606,23 @@ impl Function {
                             ],
                         };
 
-                        for (pi, bp) in data.params.iter().enumerate() {
+                        for (pi, block_call) in data.params.iter().enumerate() {
                             let block_update = &mut brif_update.calls[pi];
                             let new_block = &mut block_update.additional_block;
-                            new_block.block_succs.insert(bp.block);
+                            new_block.block_succs.insert(block_call.block);
                             new_block.block_preds.insert(b.id);
                             block_update.call.params.clear();
 
                             let mut new_values = vec![];
                             // Now, add the moves.
-                            for p in bp.params.iter() {
+                            for p in block_call.params.iter() {
                                 let new_value = self.new_value();
                                 new_values.push(new_value);
 
                                 let instdata = InstructionData::new(cg::Op::Mov(cg::Width::W64))
                                     .with_use(&[p.clone()])
                                     .with_def(&[new_value]);
+
                                 let new_id = Inst(self.instdata.len());
                                 self.instdata.push(instdata);
 
@@ -635,7 +636,7 @@ impl Function {
 
                             // Finally, insert the now branchless jump at the end of the section.
                             // Collect the program point to the original section.
-                            let dest_point = self.new_position(bp.block);
+                            let dest_point = self.new_position(block_call.block);
                             let instdata =
                                 InstructionData::new(cg::Op::Jump).with_use(&[dest_point]);
                             let new_id = Inst(self.instdata.len());
@@ -646,12 +647,12 @@ impl Function {
                                 ..Default::default()
                             };
                             jump_section.special = Some(Special::Jump(JumpData {
-                                block: bp.block,
+                                block: block_call.block,
                                 params: new_values,
                             }));
                             new_block.sections.push(jump_section);
 
-                            block_update.dest_old_blockid = bp.block;
+                            block_update.dest_old_blockid = block_call.block;
                             block_update.call.block = new_block.id;
                         }
                         println!("Got branch, splitting things");
@@ -865,6 +866,7 @@ impl Function {
                                 use_ir[0].into(),
                                 LirOperand::Machine(Operand::Immediate(0)).into(),
                             ]));
+                            todo!("never go into the other branch, is test right for value != 0 ");
                             // Collect the arguments that we'll end up using...
                             // The second lower will split this into the two blocks, so here it is a single block.
                             /*lirs.push(
@@ -948,6 +950,10 @@ impl Function {
         use cg::Reg;
 
         let rg2x = |p: regalloc2::PReg| register_machine.to_cg_reg(p.index());
+
+        if !regs.edits.is_empty() {
+            todo!("Need to handle edits");
+        }
 
         // Loop must match the order in the wrapper creator.
         for (reginst, info) in wrapper.inst_info.iter() {
@@ -1105,13 +1111,7 @@ impl Function {
                             arg: _,
                             blocks: _,
                         } => {
-                            error!("ir_regs: {:#?}", s.ir_regs);
-
-                            lirs.push(new_op(Op::Test(Width::W64)).with_use(&[
-                                Operand::Reg(s.ir_regs[ii][0]),
-                                Operand::Immediate(0),
-                            ]));
-                            todo!();
+                            panic!("should not be able to reach this");
                         }
                         _ => todo!(
                             "unimplemented structure: {:?} in {:?}, of {:?}",

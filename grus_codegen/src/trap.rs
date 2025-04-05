@@ -11,7 +11,7 @@ extern "C" fn sigtrap_handler(_sig: c_int, info: *mut libc::siginfo_t, context: 
 
         if (*info).si_signo != libc::SIGTRAP {
             panic!(
-                "Expected sigsegv error in handler, got {}.",
+                "Expected SIGTRAP error in handler, got {}.",
                 (*info).si_signo
             );
         }
