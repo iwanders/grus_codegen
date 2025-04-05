@@ -411,7 +411,6 @@ impl Instruction {
                 }
             }
             Op::Jcc(t) => {
-                v.push(INT3);
                 let offset = self.operands[0];
                 let opcode = match t {
                     JumpCondition::IfEqual => {
@@ -429,7 +428,6 @@ impl Instruction {
                 }
             }
             Op::Jump => {
-                v.push(INT3);
                 let offset = self.operands[0];
                 const JUMP_REL32: u8 = 0xE9;
                 if let Operand::Immediate(value) = offset {
