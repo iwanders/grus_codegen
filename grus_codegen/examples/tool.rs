@@ -8,6 +8,10 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
 
+    /// Use the trap handler
+    #[clap(long, short, action)]
+    register_trap: bool,
+
     /// The function index to use in this file.
     #[clap(long, short, default_value = "0")]
     fun_index: Option<usize>,
@@ -60,6 +64,7 @@ fn main() -> Result<()> {
         register_machine: cli.register_machine,
         fun_index: cli.fun_index,
         write_svg: cli.write_svg,
+        register_trap: cli.register_trap,
     };
 
     match &cli.command {

@@ -1316,11 +1316,8 @@ impl RegWrapper {
 
         let mut first_inst_in_fun = None;
 
-        //let last_block = lirfun.blocks.last().unwrap().id.0;
         for b in lirfun.blocks.iter() {
             let regblock = RegBlock::new(b.id.0);
-            // let is_entry_block = regblock == entry_block;
-            //let is_last_block = last_block == b.id.0;
 
             let mut first_inst = None;
             let mut last_inst = None;
@@ -1445,7 +1442,6 @@ impl RegWrapper {
                             first_inst_in_fun = Some(reg_inst);
                         }
                         last_inst = Some(reg_inst);
-                        println!("assigning {last_inst:?}");
 
                         let is_ret = data.operation.is_return() && is_last_inst;
                         let is_branch = data.operation.is_branch() && is_last_inst;
@@ -1649,12 +1645,6 @@ impl RegWrapper {
                 }
             }
 
-            // WHY!?
-            error!("seriously wonky +1 here to ensure register allocation works");
-            // Does it relate to
-            // https://github.com/bytecodealliance/regalloc2/blob/925df1b4674435a9322e21912926a68749517861/src/lib.rs#L1514-L1522
-            //let last_plus_one = last_inst.map(|v| RegInst::new(v.0 as usize + if !is_last_block {1}else{0}));
-
             let last_plus_one = last_inst.map(|v| RegInst::new(v.0 as usize + 1));
 
             let range = InstRange::new(
@@ -1683,35 +1673,6 @@ impl RegWrapper {
                 these_block_params.push(*vreg);
             }
         }
-
-        /*
-        // Find the first instruction in the entry block, into that instruction we'll inject the
-        // function arguments.
-        if let Some(reg_inst) = first_inst_in_fun {
-            let first_info = inst_info
-                .get_mut(&reg_inst)
-                .expect("no info for first instruction");
-            for (i, v) in lirfun.fun_args.iter().enumerate() {
-                let regtype = RegClass::Int;
-
-                let vreg = value_info
-                    .entry(*v)
-                    .or_insert_with(|| VReg::new(v.as_u32() as usize, regtype));
-                let preg = regalloc2::PReg::new(i, regtype);
-
-                println!("Note to self, hardcoded call convention; {vreg:?} -> {preg:?}");
-                let operand = RegOperand::new(
-                    *vreg,
-                    regalloc2::OperandConstraint::FixedReg(preg),
-                    regalloc2::OperandKind::Def,
-                    regalloc2::OperandPos::Early,
-                );
-
-                first_info.operands.push(operand);
-            }
-        } else {
-            panic!()
-        }*/
 
         let num_insts = inst_info.len();
         let num_blocks = block_insn.len();

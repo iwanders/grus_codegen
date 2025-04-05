@@ -19,6 +19,7 @@ fn test_incremental() -> Result<(), anyhow::Error> {
         register_machine: grus_codegen::RegisterMachine::Int4,
         fun_index: None,
         write_svg: None,
+        register_trap: false,
     };
 
     for f in filenames {

@@ -24,6 +24,7 @@ pub struct TestSettings {
     pub register_machine: RegisterMachine,
     pub fun_index: Option<usize>,
     pub write_svg: Option<std::path::PathBuf>,
+    pub register_trap: bool,
 }
 impl TestSettings {
     pub fn to_compile_settings(&self) -> crate::isa::CompileSettings {
@@ -173,6 +174,10 @@ pub fn test_files<P: AsRef<std::path::Path> + std::fmt::Debug>(
     files: &[P],
     settings: &TestSettings,
 ) -> Result<bool> {
+    if settings.register_trap {
+        crate::trap::setup_int3();
+    }
+
     let mut all_passed = true;
     for f in files {
         let f = std::fs::read_to_string(f).context(format!("failed to open {f:?}"))?;

@@ -17,6 +17,7 @@ fn attempt_two() -> ResultReturn {
         register_machine: grus_codegen::RegisterMachine::Int4,
         fun_index: None,
         write_svg: None,
+        register_trap: false,
     };
 
     println!("isa.triple(): {}", &isa.triple());

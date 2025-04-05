@@ -31,6 +31,7 @@ fn test_upstream() -> Result<(), anyhow::Error> {
         register_machine: grus_codegen::RegisterMachine::Int4,
         fun_index: None,
         write_svg: None,
+        register_trap: false,
     };
 
     let files = crawl_dir(d)?;
