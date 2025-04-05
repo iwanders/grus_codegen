@@ -12,6 +12,8 @@ fn test_incremental() -> Result<(), anyhow::Error> {
         "0003_more_instructions.clif",
         "0004_arithmetic_sub_i64_i32_i16_i8.clif",
         "0005_arithmetic_mul_i64_i32_i16_i8.clif",
+        "0006b_branch_diverge.clif",
+        "0006c_branch_diverge_simpler.clif",
     ];
 
     let test_settings = grus_codegen::clif_support::TestSettings {
