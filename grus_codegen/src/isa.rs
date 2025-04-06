@@ -108,7 +108,7 @@ impl X86Isa {
                 regalloc2::run(&reg_wrapper, &env, &options)?
             }
         };
-        println!("reg_outputs: {reg_outputs:#?}");
+        //println!("reg_outputs: {reg_outputs:#?}");
         if let Some(svg_output_path) = &settings.write_svg {
             let options = Default::default();
             let document = grus_regalloc::svg::register_document(

@@ -234,8 +234,7 @@ pub struct BrifData {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct JumpData {
-    block: BlockId,
-    params: Vec<Value>,
+    call: BlockCall,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -253,6 +252,23 @@ enum Special {
     ///
     /// Holds the values used to call the other branches.
     Jump(JumpData),
+}
+
+impl Special {
+    pub fn block_call_count(&self) -> usize {
+        match self {
+            Special::Preamble => 0,
+            Special::Brif(brif_data) => brif_data.params.len(),
+            Special::Jump(jump_data) => 1,
+        }
+    }
+    pub fn get_block_call(&self, index: usize) -> &BlockCall {
+        match self {
+            Special::Preamble => unreachable!(),
+            Special::Brif(brif_data) => &brif_data.params[index],
+            Special::Jump(jump_data) => &jump_data.call,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -290,6 +306,9 @@ impl Section {
     }
     pub fn is_branch(&self) -> bool {
         matches!(self.special, Some(Special::Brif(_)))
+    }
+    pub fn is_jump(&self) -> bool {
+        matches!(self.special, Some(Special::Jump(_)))
     }
 }
 
@@ -550,6 +569,14 @@ impl Function {
 
           How do we express jump with use's? Do they define? or do they use?
           oh... regfun.branch_blockparams probably takes care of that?
+
+          Lets also do jumps?
+          jump block3(v1, v3)
+
+          -> Jump block3a
+          mov _ _
+          mov _ _
+          jump block3
         */
 
         #[derive(Debug)]
@@ -564,102 +591,89 @@ impl Function {
             block_idx: usize,
             section_idx: usize,
             containing_blockid: BlockId,
-            calls: [BlockUpdate; 2],
+            is_branch: bool,
+            calls: Vec<BlockUpdate>,
         }
 
         let mut new_blocks = vec![];
         for (bi, b) in self.blocks.iter().enumerate() {
             for (si, s) in b.sections.iter().enumerate() {
-                if !s.is_branch() {
+                if !s.is_branch() && !s.is_jump() {
                     continue;
                 }
 
                 if let Some(z) = s.special.as_ref() {
-                    if let Special::Brif(data) = z {
-                        // Initialise the brif update struct.
-                        let (new_true_block_id, new_false_block_id) =
-                            { (self.get_blockid(None), self.get_blockid(None)) };
+                    let mut update = BrifUpdate {
+                        block_idx: bi,
+                        section_idx: si,
+                        containing_blockid: b.id,
+                        is_branch: s.is_branch(),
+                        calls: vec![],
+                    };
+                    for call_idx in 0..z.block_call_count() {
+                        let this_call = z.get_block_call(call_idx);
+                        update.calls.push(BlockUpdate {
+                            additional_block: {
+                                let new_true_block_id = self.get_blockid(None);
+                                println!("New block id: {new_true_block_id:?}");
+                                let new_block = Block::new(new_true_block_id);
+                                new_block
+                            },
+                            call: this_call.clone(),
+                            dest_old_blockid: this_call.block,
+                        });
 
-                        let mut brif_update = BrifUpdate {
-                            block_idx: bi,
-                            section_idx: si,
-                            containing_blockid: b.id,
-                            calls: [
-                                BlockUpdate {
-                                    additional_block: {
-                                        println!("New block id: {new_true_block_id:?}");
-                                        let new_block = Block::new(new_true_block_id);
-                                        new_block
-                                    },
-                                    call: data.params[0].clone(),
-                                    dest_old_blockid: data.params[0].block,
-                                },
-                                BlockUpdate {
-                                    additional_block: {
-                                        println!("New block id: {new_false_block_id:?}");
-                                        let new_block = Block::new(new_false_block_id);
-                                        new_block
-                                    },
-                                    call: data.params[1].clone(),
-                                    dest_old_blockid: data.params[1].block,
-                                },
-                            ],
-                        };
+                        let block_update = &mut update.calls[call_idx];
+                        let new_block = &mut block_update.additional_block;
+                        new_block.block_succs.insert(block_update.call.block);
+                        new_block.block_preds.insert(b.id);
+                        block_update.call.params.clear();
 
-                        for (pi, block_call) in data.params.iter().enumerate() {
-                            let block_update = &mut brif_update.calls[pi];
-                            let new_block = &mut block_update.additional_block;
-                            new_block.block_succs.insert(block_call.block);
-                            new_block.block_preds.insert(b.id);
-                            block_update.call.params.clear();
+                        let mut new_values = vec![];
+                        // Now, add the moves.
+                        for p in this_call.params.iter() {
+                            let new_value = self.new_value();
+                            new_values.push(new_value);
 
-                            let mut new_values = vec![];
-                            // Now, add the moves.
-                            for p in block_call.params.iter() {
-                                let new_value = self.new_value();
-                                new_values.push(new_value);
+                            let instdata = InstructionData::new(cg::Op::Mov(cg::Width::W64))
+                                .with_use(&[p.clone()])
+                                .with_def(&[new_value]);
 
-                                let instdata = InstructionData::new(cg::Op::Mov(cg::Width::W64))
-                                    .with_use(&[p.clone()])
-                                    .with_def(&[new_value]);
-
-                                let new_id = Inst(self.instdata.len());
-                                self.instdata.push(instdata);
-
-                                let new_section = Section {
-                                    lir_inst: vec![new_id],
-                                    is_lowered: true,
-                                    ..Default::default()
-                                };
-                                new_block.sections.push(new_section);
-                            }
-
-                            // Finally, insert the now branchless jump at the end of the section.
-                            // Collect the program point to the original section.
-                            let dest_point = self.new_position(block_call.block);
-                            let instdata =
-                                InstructionData::new(cg::Op::Jump).with_use(&[dest_point]);
                             let new_id = Inst(self.instdata.len());
                             self.instdata.push(instdata);
-                            let mut jump_section = Section {
+
+                            let new_section = Section {
                                 lir_inst: vec![new_id],
                                 is_lowered: true,
                                 ..Default::default()
                             };
-                            jump_section.special = Some(Special::Jump(JumpData {
-                                block: block_call.block,
-                                params: new_values,
-                            }));
-                            new_block.sections.push(jump_section);
-
-                            block_update.dest_old_blockid = block_call.block;
-                            block_update.call.block = new_block.id;
+                            new_block.sections.push(new_section);
                         }
-                        println!("Got branch, splitting things");
 
-                        // Actually lower this...
-                        new_blocks.push(brif_update);
+                        // Finally, insert the now branchless jump at the end of the section.
+                        // Collect the program point to the original section.
+                        let dest_point = self.new_position(block_update.call.block);
+                        let instdata = InstructionData::new(cg::Op::Jump).with_use(&[dest_point]);
+                        let new_id = Inst(self.instdata.len());
+                        self.instdata.push(instdata);
+                        let mut jump_section = Section {
+                            lir_inst: vec![new_id],
+                            is_lowered: true,
+                            ..Default::default()
+                        };
+                        jump_section.special = Some(Special::Jump(JumpData {
+                            call: BlockCall {
+                                block: block_update.call.block,
+                                params: new_values,
+                            },
+                        }));
+                        new_block.sections.push(jump_section);
+
+                        block_update.dest_old_blockid = block_update.call.block;
+                        block_update.call.block = new_block.id;
                     }
+
+                    new_blocks.push(update);
                 }
             }
         }
@@ -672,22 +686,32 @@ impl Function {
 
             self.blocks[bi].sections[si].is_lowered = true;
 
-            let dest_uses = vec![
-                self.new_position(brif_update.calls[0].additional_block.id)
-                    .into(),
-                self.new_position(brif_update.calls[1].additional_block.id)
-                    .into(),
-            ];
+            let dest_uses = brif_update
+                .calls
+                .iter()
+                .map(|z| self.new_position(z.additional_block.id).into())
+                .collect::<Vec<_>>();
 
-            let new_id = Inst(self.instdata.len());
-            let l = InstructionData {
-                operation: cg::Op::Jcc(cg::JumpCondition::IfEqual),
-                def_operands: vec![],
-                use_operands: dest_uses,
-            };
-            self.instdata.push(l);
-
-            self.blocks[bi].sections[si].lir_inst.push(new_id);
+            if brif_update.is_branch {
+                let new_id = Inst(self.instdata.len());
+                let l = InstructionData {
+                    operation: cg::Op::Jcc(cg::JumpCondition::IfEqual),
+                    def_operands: vec![],
+                    use_operands: dest_uses,
+                };
+                self.instdata.push(l);
+                self.blocks[bi].sections[si].lir_inst.push(new_id);
+            } else {
+                // it is a jump. Jump to the new block.
+                let new_id = Inst(self.instdata.len());
+                let l = InstructionData {
+                    operation: cg::Op::Jump,
+                    def_operands: vec![],
+                    use_operands: dest_uses,
+                };
+                self.instdata.push(l);
+                self.blocks[bi].sections[si].lir_inst.push(new_id);
+            }
 
             for (pi, call_update) in brif_update.calls.iter().enumerate() {
                 //let mut orig_section = &mut self.blocks[bi].sections[si];
@@ -717,15 +741,17 @@ impl Function {
                     if let Special::Brif(data) = v {
                         data.params[pi] = brif_update.calls[pi].call.clone();
                     }
+                    if let Special::Jump(data) = v {
+                        data.call = brif_update.calls[pi].call.clone();
+                    }
                 }
             }
 
             // Then, insert the new block just after the previous id block.
             if let Some(position) = self.blocks.iter().position(|z| z.id == containing_blockid) {
-                self.blocks
-                    .insert(position + 1, brif_update.calls[0].additional_block.clone());
-                self.blocks
-                    .insert(position + 1, brif_update.calls[1].additional_block.clone());
+                for c in brif_update.calls.iter() {
+                    self.blocks.insert(position + 1, c.additional_block.clone());
+                }
             }
         }
         //self.blocks.extend(new_blocks);
@@ -894,6 +920,26 @@ impl Function {
                             };
                             let brif_special = Special::Brif(brif_data);
                             s.special = Some(brif_special);
+                        }
+
+                        IrInstructionData::Jump {
+                            opcode: _,
+                            destination,
+                        } => {
+                            debug!("Jump : {destination:#?}");
+                            let jump_data = JumpData {
+                                call: BlockCall {
+                                    block: block_map[&destination.block(&dfg.value_lists)],
+                                    params: destination
+                                        .args_slice(&dfg.value_lists)
+                                        .iter()
+                                        .map(|z| (*z).into())
+                                        .collect(),
+                                },
+                            };
+
+                            let jump_special = Special::Jump(jump_data);
+                            s.special = Some(jump_special);
                         }
 
                         _ => todo!(
@@ -1418,7 +1464,7 @@ impl RegWrapper {
                                         let key = (regblock, reg_inst);
                                         let mut block_values = vec![];
                                         let mut this_call_values = vec![];
-                                        for v in jump_data.params.iter() {
+                                        for v in jump_data.call.params.iter() {
                                             let vreg = value_info
                                                 .entry(*v)
                                                 .or_insert_with(|| {
@@ -1464,7 +1510,7 @@ impl RegWrapper {
                                 }
                                 Special::Jump(jump_data) => {
                                     if is_last_inst {
-                                        description += &format!(" -> {:?}", jump_data.block);
+                                        description += &format!(" -> {:?}", jump_data.call.block);
                                     }
                                 }
                             }
@@ -1528,7 +1574,7 @@ impl RegWrapper {
                                     }
                                 }
                                 Special::Jump(jump_data) => {
-                                    for branch_param in jump_data.params.iter() {
+                                    for branch_param in jump_data.call.params.iter() {
                                         let valuetype = fun.dfg.value_type(*branch_param);
                                         let regtype = if valuetype.is_int() {
                                             RegClass::Int
@@ -1616,7 +1662,7 @@ impl RegWrapper {
                                     let key = (regblock, reg_inst);
                                     let mut block_values = vec![];
                                     let mut this_call_values = vec![];
-                                    for v in jump_data.params.iter() {
+                                    for v in jump_data.call.params.iter() {
                                         let vreg = value_info
                                             .entry(*v)
                                             .or_insert_with(|| {
@@ -1676,13 +1722,13 @@ impl RegWrapper {
 
         let num_insts = inst_info.len();
         let num_blocks = block_insn.len();
-        println!("num_blocks: {num_blocks:#?}");
+        //println!("num_blocks: {num_blocks:#?}");
 
         let num_values = value_info.len();
 
-        println!("block_insn: {block_insn:#?}");
-        println!("block_succs: {block_succs:#?}");
-        println!("block_preds: {block_preds:#?}");
+        //println!("block_insn: {block_insn:#?}");
+        //println!("block_succs: {block_succs:#?}");
+        //println!("block_preds: {block_preds:#?}");
 
         {
             // Check that the values are consecutively numbered.
