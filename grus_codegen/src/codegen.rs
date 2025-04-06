@@ -455,7 +455,7 @@ impl Instruction {
                     Operand::Reg(r) => {
                         let opcode = match cond {
                             Condition::IfLess => {
-                                const SET_BYTE_IF_LESS_SF_NE_OF: [u8; 2] = [0x0F, 0x9C];
+                                const SET_BYTE_IF_LESS_SF_NE_OF: [u8; 3] = [0x0F, 0x9C, 0x00];
                                 SET_BYTE_IF_LESS_SF_NE_OF
                             }
                             _ => {

@@ -1,0 +1,12 @@
+test run
+target x86_64
+
+function %icmp_ult(i64, i64) -> i8 {
+block0(v0: i64,v1: i64):
+    v2 = icmp ult v0, v1
+    return v2
+}
+; run: %icmp_ult(5, 5) == 0
+; run: %icmp_ult(6, 5) == 0
+; run: %icmp_ult(3, 5) == 1
+; run: %icmp_ult(5, 6) == 1
