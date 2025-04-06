@@ -346,8 +346,16 @@ impl Instruction {
                         v.push(0x03);
                         v.push(modrm.into());
                     }
-                    (Operand::Reg(_r), Operand::Immediate(_b)) => {
-                        todo!()
+                    (Operand::Reg(r), Operand::Immediate(b)) => {
+                        // Move immediate into destination, then do a normal addition based on register by register.
+                        if (b as i32) as i64 != b {
+                            todo!("need a scratch register if we need more than 32 bits");
+                        }
+                        let (rex, opcode) =
+                            Self::addr_reg(r, &[0x81, 0], width, ModSpec::RegisterRegister)?;
+                        v.push(rex.into());
+                        v.extend(opcode.iter());
+                        v.extend((b as u32).to_le_bytes());
                     }
                     _ => todo!(),
                 }

@@ -73,3 +73,14 @@ block0(v0: i8,v1: i8):
 ; run: %add_i8(0x01, 0xFE) == -1
 ; run: %add_i8(0xA0, 0x0B) == 0xAB
 ; run: %add_i8(0xC0, 0x1D) == 0xDD
+
+;iadd_imm
+
+function %iaddadd_i8(i8) -> i8 {
+block0(v0: i8):
+    v1 = iadd_imm v0, 8
+    return v1
+}
+; run: %iaddadd_i8(0) == 8
+; run: %iaddadd_i8(1) == 9
+; run: %iaddadd_i8(10) == 18

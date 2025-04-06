@@ -880,6 +880,32 @@ impl Function {
                                 self.fun.name
                             ),
                         },
+
+                        IrInstructionData::BinaryImm64 { opcode, arg, imm } => match opcode {
+                            ir::Opcode::IaddImm => {
+                                let width: Width = typevar_operand
+                                    .as_ref()
+                                    .map(type_of)
+                                    .map(|z| z.into())
+                                    .unwrap();
+                                let use_vals: [LirOperand; 2] = [
+                                    use_ir[0].into(),
+                                    LirOperand::Machine(cg::Operand::Immediate(imm.bits())).into(),
+                                ];
+
+                                lirs.push(
+                                    new_op(Op::IAdd(width))
+                                        .with_use(&use_vals)
+                                        .with_def(&[def_ir[0]]),
+                                );
+                            }
+                            _ => todo!(
+                                "unimplemented opcode: {:?} in {:?}, of {:?}",
+                                opcode,
+                                inst,
+                                self.fun.name
+                            ),
+                        },
                         IrInstructionData::Brif {
                             opcode: _,
                             arg,
