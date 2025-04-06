@@ -95,6 +95,23 @@ use cranelift_codegen::isa::CallConv;
 use log::*;
 use std::collections::{HashMap, HashSet};
 
+impl From<ir::condcodes::IntCC> for cg::Condition {
+    fn from(value: ir::condcodes::IntCC) -> Self {
+        match value {
+            ir::condcodes::IntCC::Equal => todo!(),
+            ir::condcodes::IntCC::NotEqual => todo!(),
+            ir::condcodes::IntCC::SignedLessThan => todo!(),
+            ir::condcodes::IntCC::SignedGreaterThanOrEqual => todo!(),
+            ir::condcodes::IntCC::SignedGreaterThan => todo!(),
+            ir::condcodes::IntCC::SignedLessThanOrEqual => todo!(),
+            ir::condcodes::IntCC::UnsignedLessThan => cg::Condition::IfLess,
+            ir::condcodes::IntCC::UnsignedGreaterThanOrEqual => todo!(),
+            ir::condcodes::IntCC::UnsignedGreaterThan => todo!(),
+            ir::condcodes::IntCC::UnsignedLessThanOrEqual => todo!(),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 struct BlockId(usize);
 
@@ -981,9 +998,7 @@ impl Function {
                             // Lowers into a compare operation between the two registers.
                             lirs.push(new_op(Op::Cmp(width)).with_use(&[use_ir[0], use_ir[1]]));
                             // Followed by a conditional set based on the desired condition.
-                            lirs.push(
-                                new_op(Op::SetCC(cg::Condition::IfLess)).with_def(&[def_ir[0]]),
-                            );
+                            lirs.push(new_op(Op::SetCC(cond.into())).with_def(&[def_ir[0]]));
                         }
 
                         _ => todo!(
