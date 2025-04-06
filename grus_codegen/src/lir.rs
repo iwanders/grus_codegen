@@ -696,7 +696,7 @@ impl Function {
             if brif_update.is_branch {
                 let new_id = Inst(self.instdata.len());
                 let l = InstructionData {
-                    operation: cg::Op::Jcc(cg::JumpCondition::IfEqual),
+                    operation: cg::Op::Jcc(cg::Condition::IfEqual),
                     def_operands: vec![],
                     use_operands: dest_uses,
                 };
@@ -970,6 +970,20 @@ impl Function {
 
                             let jump_special = Special::Jump(jump_data);
                             s.special = Some(jump_special);
+                        }
+                        IrInstructionData::IntCompare { opcode, args, cond } => {
+                            let width: Width = typevar_operand
+                                .as_ref()
+                                .map(type_of)
+                                .map(|z| z.into())
+                                .unwrap();
+
+                            // Lowers into a compare operation between the two registers.
+                            lirs.push(new_op(Op::Cmp(width)).with_use(&[use_ir[0], use_ir[1]]));
+                            // Followed by a conditional set based on the desired condition.
+                            lirs.push(
+                                new_op(Op::SetCC(cg::Condition::IfLess)).with_def(&[def_ir[0]]),
+                            );
                         }
 
                         _ => todo!(

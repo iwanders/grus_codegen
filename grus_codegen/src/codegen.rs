@@ -25,11 +25,13 @@ pub enum CodegenError {
 }
 
 #[derive(Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Copy, Clone)]
-pub enum JumpCondition {
-    /// Jump if ZF == 0.
+pub enum Condition {
+    /// Jump if, ZF == 0.
     IfNotEqual,
-    /// Jump if ZF != 0.
+    /// Jump if, ZF != 0.
     IfEqual,
+    /// If Less, SF != OF
+    IfLess,
 }
 
 /// x86 instructions
@@ -60,10 +62,20 @@ pub enum Op {
     /// TEST r/m16, r16   TEST r/m32, r32   TEST r/m64, r64
     Test(Width),
 
+    /// CMP - Compare
+    ///
+    /// REX.W + 3B /r CMP r64, r/m64 RM Valid N.E. Compare r/m64 with r64.
+    Cmp(Width),
+
     /// JCC - Jump if Condition is Met
     ///
     ///
-    Jcc(JumpCondition),
+    Jcc(Condition),
+
+    /// SetCC - Conditionally set a register to 0 or 1
+    ///
+    ///
+    SetCC(Condition),
 
     /// NOP - No Operation
     ///
@@ -90,7 +102,9 @@ impl Op {
             Op::IMul(_) => 2..=2, // heh, technically 1..=3... with 3 only with intermediate, 1 for eax
             Op::Return => 0..=0,
             Op::Test(_) => 2..=2,
+            Op::Cmp(_) => 2..=2,
             Op::Jcc(_) => 1..=1,
+            Op::SetCC(_) => 1..=1,
             Op::Nop => 0..=0,
             Op::Jump => 1..=1,
             Op::Int3 => 0..=0,
@@ -419,16 +433,58 @@ impl Instruction {
                     _ => todo!(),
                 }
             }
-            Op::Jcc(t) => {
+            Op::Cmp(width) => {
+                let dest = self.operands[0];
+                let src = self.operands[1];
+                match (dest, src) {
+                    (Operand::Reg(r), Operand::Reg(b)) => {
+                        let (rex, modrm) = Self::addr_regs(r, b, width)?;
+                        v.push(rex.into());
+                        v.push(0x3B);
+                        v.push(modrm.into());
+                    }
+                    (Operand::Reg(_r), Operand::Immediate(_b)) => {
+                        todo!();
+                    }
+                    _ => todo!(),
+                }
+            }
+            Op::SetCC(cond) => {
+                let r = self.operands[0];
+                match r {
+                    Operand::Reg(r) => {
+                        let opcode = match cond {
+                            Condition::IfLess => {
+                                const SET_BYTE_IF_LESS_SF_NE_OF: [u8; 2] = [0x0F, 0x9C];
+                                SET_BYTE_IF_LESS_SF_NE_OF
+                            }
+                            _ => {
+                                todo!("handle cond: {cond:?}");
+                            }
+                        };
+                        let (rex, opcode) =
+                            Self::addr_reg(r, &opcode, Width::W8, ModSpec::RegisterRegister)?;
+                        v.push(rex.into());
+                        v.extend(opcode.iter());
+                    }
+                    Operand::Immediate(_) => {
+                        panic!("got immediate for setCC destination");
+                    }
+                }
+            }
+            Op::Jcc(cond) => {
                 let offset = self.operands[0];
-                let opcode = match t {
-                    JumpCondition::IfEqual => {
+                let opcode = match cond {
+                    Condition::IfEqual => {
                         const JUMP_NEAR_IF_NOT_EQUAL_ZF_EQ_0_REL32: [u8; 2] = [0x0F, 0x85];
                         JUMP_NEAR_IF_NOT_EQUAL_ZF_EQ_0_REL32
                     }
-                    JumpCondition::IfNotEqual => {
+                    Condition::IfNotEqual => {
                         const JUMP_NEAR_IF_NOT_EQUAL_ZF_NE_0_REL32: [u8; 2] = [0x0F, 0x84];
                         JUMP_NEAR_IF_NOT_EQUAL_ZF_NE_0_REL32
+                    }
+                    _ => {
+                        todo!("handle cond: {cond:?}");
                     }
                 };
                 if let Operand::Immediate(value) = offset {
