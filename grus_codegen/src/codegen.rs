@@ -220,6 +220,7 @@ pub type OpcodeVec = ArrayVec<u8, 3>;
 // These are here because i tis sometimes helpful to insert one of these during debugging.
 const RETN: u8 = 0xC3;
 const INT3: u8 = 0xCC;
+const NOP: u8 = 0x90;
 
 pub enum ModSpec {
     Memory,           // 0b00
@@ -436,7 +437,7 @@ impl Instruction {
                 }
             }
             Op::Nop => {
-                todo!()
+                v.push(NOP);
             }
             Op::Int3 => {
                 v.push(INT3);

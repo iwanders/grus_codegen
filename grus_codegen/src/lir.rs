@@ -612,6 +612,7 @@ impl Function {
                     };
                     for call_idx in 0..z.block_call_count() {
                         let this_call = z.get_block_call(call_idx);
+
                         update.calls.push(BlockUpdate {
                             additional_block: {
                                 let new_true_block_id = self.get_blockid(None);
@@ -715,6 +716,9 @@ impl Function {
 
             for (pi, call_update) in brif_update.calls.iter().enumerate() {
                 //let mut orig_section = &mut self.blocks[bi].sections[si];
+                if call_update.call.params.is_empty() {
+                    //continue;
+                }
 
                 let new_dest = call_update.additional_block.id;
                 let old_dest = call_update.dest_old_blockid;
