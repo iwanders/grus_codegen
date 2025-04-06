@@ -32,6 +32,8 @@ pub enum Condition {
     IfEqual,
     /// If Less, SF != OF
     IfLess,
+    /// If Greater if greater (ZF=0 and SF=OF).
+    IfGreater,
 }
 
 /// x86 instructions
@@ -458,6 +460,12 @@ impl Instruction {
                                 const SET_BYTE_IF_LESS_SF_NE_OF: [u8; 3] = [0x0F, 0x9C, 0x00];
                                 SET_BYTE_IF_LESS_SF_NE_OF
                             }
+                            Condition::IfGreater => {
+                                const SET_BYTE_IF_GREATER_ZF_EQ_0_AND_SF_EQ_OF: [u8; 3] =
+                                    [0x0F, 0x9F, 0x00];
+                                SET_BYTE_IF_GREATER_ZF_EQ_0_AND_SF_EQ_OF
+                            }
+
                             _ => {
                                 todo!("handle cond: {cond:?}");
                             }

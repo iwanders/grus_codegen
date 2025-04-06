@@ -106,7 +106,7 @@ impl From<ir::condcodes::IntCC> for cg::Condition {
             ir::condcodes::IntCC::SignedLessThanOrEqual => todo!(),
             ir::condcodes::IntCC::UnsignedLessThan => cg::Condition::IfLess,
             ir::condcodes::IntCC::UnsignedGreaterThanOrEqual => todo!(),
-            ir::condcodes::IntCC::UnsignedGreaterThan => todo!(),
+            ir::condcodes::IntCC::UnsignedGreaterThan => cg::Condition::IfGreater,
             ir::condcodes::IntCC::UnsignedLessThanOrEqual => todo!(),
         }
     }
@@ -276,7 +276,7 @@ impl Special {
         match self {
             Special::Preamble => 0,
             Special::Brif(brif_data) => brif_data.params.len(),
-            Special::Jump(jump_data) => 1,
+            Special::Jump(_jump_data) => 1,
         }
     }
     pub fn get_block_call(&self, index: usize) -> &BlockCall {
@@ -898,7 +898,11 @@ impl Function {
                             ),
                         },
 
-                        IrInstructionData::BinaryImm64 { opcode, arg, imm } => match opcode {
+                        IrInstructionData::BinaryImm64 {
+                            opcode,
+                            arg: _,
+                            imm,
+                        } => match opcode {
                             ir::Opcode::IaddImm => {
                                 let width: Width = typevar_operand
                                     .as_ref()
@@ -988,7 +992,11 @@ impl Function {
                             let jump_special = Special::Jump(jump_data);
                             s.special = Some(jump_special);
                         }
-                        IrInstructionData::IntCompare { opcode, args, cond } => {
+                        IrInstructionData::IntCompare {
+                            opcode: _,
+                            args: _,
+                            cond,
+                        } => {
                             let width: Width = typevar_operand
                                 .as_ref()
                                 .map(type_of)
