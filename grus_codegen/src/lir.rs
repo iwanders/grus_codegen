@@ -1392,6 +1392,8 @@ pub struct RegWrapper {
     inst_info: HashMap<RegInst, InstInfo>,
     value_info: HashMap<Value, VReg>,
 
+    regblock_to_block: HashMap<RegBlock, BlockId>,
+
     fun: CraneliftIrFunction,
 }
 
@@ -1405,32 +1407,28 @@ impl RegWrapper {
         let mut value_info: HashMap<Value, VReg> = Default::default();
         let mut branch_blockparam: HashMap<(RegBlock, RegInst), Vec<Vec<VReg>>> =
             Default::default();
+        let mut regblock_to_block: HashMap<RegBlock, BlockId> = Default::default();
+        let mut block_to_regblock: HashMap<BlockId, RegBlock> = Default::default();
 
-        // Verify the blocks are sequentially numbered.
+        // Make the block lookup.
         {
-            let mut v = std::collections::BTreeSet::new();
-            for b in lirfun.blocks.iter() {
-                v.insert(b.id.0);
-            }
-            for (i, bi) in v.iter().enumerate() {
-                if i != *bi {
-                    //panic!("blocks aren't ordered consecutively");
-                }
+            for (i, b) in lirfun.blocks.iter().enumerate() {
+                let lirid = b.id;
+                let regblock = RegBlock::new(i);
+                regblock_to_block.insert(regblock, lirid);
+                block_to_regblock.insert(lirid, regblock);
             }
         }
 
         let fun = &lirfun.fun;
-        let entry_block = RegBlock::new(
-            lirfun
-                .entry_block
-                .expect("regalloc function must have entry block")
-                .0,
-        );
+        let entry_block: RegBlock = block_to_regblock[&lirfun
+            .entry_block
+            .expect("regalloc function must have entry block")];
 
         let mut first_inst_in_fun = None;
 
         for b in lirfun.blocks.iter() {
-            let regblock = RegBlock::new(b.id.0);
+            let regblock = block_to_regblock[&b.id];
 
             let mut first_inst = None;
             let mut last_inst = None;
@@ -1769,12 +1767,18 @@ impl RegWrapper {
 
             block_succs.insert(
                 regblock,
-                b.block_succs.iter().map(|v| RegBlock::new(v.0)).collect(),
+                b.block_succs
+                    .iter()
+                    .map(|v| block_to_regblock[&v])
+                    .collect(),
             );
 
             block_preds.insert(
                 regblock,
-                b.block_preds.iter().map(|v| RegBlock::new(v.0)).collect(),
+                b.block_preds
+                    .iter()
+                    .map(|v| block_to_regblock[&v])
+                    .collect(),
             );
 
             let these_block_params = block_params.entry(regblock).or_default();
@@ -1819,6 +1823,7 @@ impl RegWrapper {
             block_params,
             block_succs,
             block_preds,
+            regblock_to_block,
             branch_blockparam,
             inst_info,
             value_info,
