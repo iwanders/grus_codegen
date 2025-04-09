@@ -25,13 +25,14 @@ impl RegisterMachine {
 
     pub fn to_cg_reg(&self, index: usize) -> crate::codegen::Reg {
         let reg_order = [
-            crate::codegen::Reg::EDI, // PReg(0),
-            crate::codegen::Reg::ESI, // PReg(1),
-            crate::codegen::Reg::EDX, // PReg(2),
-            crate::codegen::Reg::ECX, // PReg(3),
-                                      // Reg::R8,  // PReg(4),
-                                      // Reg::R9,  // PReg(5),
-                                      // Reg::R10, Reg::R11, Reg::R12, Reg::R13, Reg::R14, Reg::R15
+            crate::codegen::Reg::EAX,
+            crate::codegen::Reg::ECX,
+            crate::codegen::Reg::EDX,
+            crate::codegen::Reg::ESI,
+            crate::codegen::Reg::EDI,
+            crate::codegen::Reg::R8,
+            crate::codegen::Reg::R9,
+            crate::codegen::Reg::R11,
         ];
         *match *self {
             RegisterMachine::Int1 => reg_order

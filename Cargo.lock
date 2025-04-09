@@ -201,7 +201,7 @@ dependencies = [
  "gimli",
  "hashbrown 0.14.5",
  "log",
- "regalloc2 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "regalloc2 0.11.1",
  "rustc-hash",
  "serde",
  "smallvec",
@@ -418,7 +418,7 @@ dependencies = [
  "grus_regalloc",
  "libc",
  "log",
- "regalloc2 0.11.1",
+ "regalloc2 0.11.3",
  "serde",
  "serde_json",
  "target-lexicon",
@@ -445,7 +445,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "cranelift-codegen",
- "regalloc2 0.11.1",
+ "regalloc2 0.11.3",
  "svg",
  "svg_util",
  "thiserror",
@@ -587,19 +587,6 @@ dependencies = [
 [[package]]
 name = "regalloc2"
 version = "0.11.1"
-dependencies = [
- "allocator-api2",
- "bumpalo",
- "hashbrown 0.15.2",
- "log",
- "rustc-hash",
- "serde",
- "smallvec",
-]
-
-[[package]]
-name = "regalloc2"
-version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "145c1c267e14f20fb0f88aa76a1c5ffec42d592c1d28b3cd9148ae35916158d3"
 dependencies = [
@@ -608,6 +595,19 @@ dependencies = [
  "hashbrown 0.15.2",
  "log",
  "rustc-hash",
+ "smallvec",
+]
+
+[[package]]
+name = "regalloc2"
+version = "0.11.3"
+dependencies = [
+ "allocator-api2",
+ "bumpalo",
+ "hashbrown 0.15.2",
+ "log",
+ "rustc-hash",
+ "serde",
  "smallvec",
 ]
 

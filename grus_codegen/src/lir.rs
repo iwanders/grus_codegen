@@ -1077,19 +1077,25 @@ impl Function {
                     if !inst_data.has_virtuals() {
                         continue;
                     }
-                    //println!("@ {reginst:?} inst_data: {inst_data:#?}");
+                    println!("@ {reginst:?} inst_data: {inst_data:#?}");
                     let allocs_args = regs.inst_allocs(*reginst);
                     let use_allocs = &allocs_args[0..];
-                    //println!("use_allocs.len: {}", use_allocs.len());
+                    println!("use_allocs.len: {} {:?}", use_allocs.len(), use_allocs);
                     let mut index = 0;
-                    // let use_allocs = &allocs_args[0..inst_data.use_operands.len()];
+                    //let use_allocs = &allocs_args[0..inst_data.use_operands.len()];
+
                     for cont in [&mut inst_data.use_operands, &mut inst_data.def_operands] {
                         for z in cont.iter_mut() {
                             match z {
                                 LirOperand::Virtual(_v) => {
-                                    *z = LirOperand::Machine(cg::Operand::Reg(rg2x(
-                                        use_allocs[index].as_reg().unwrap(),
-                                    )));
+                                    let this_alloc = use_allocs[index];
+                                    if this_alloc.is_reg() {
+                                        *z = LirOperand::Machine(cg::Operand::Reg(rg2x(
+                                            use_allocs[index].as_reg().unwrap(),
+                                        )));
+                                    } else {
+                                        todo!("need to handle allocation: {this_alloc:?}");
+                                    }
                                     index += 1;
                                 }
                                 _ => {}
