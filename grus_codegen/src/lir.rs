@@ -260,7 +260,7 @@ enum Special {
     ///
     /// This sets up the stack, if any.
     /// This creates 'n' Nop instructions that create the input values out of thin air.
-    Preamble,
+    Prologue,
     /// Branch if data
     ///
     /// Holds the values used to call the other branches.
@@ -274,14 +274,14 @@ enum Special {
 impl Special {
     pub fn block_call_count(&self) -> usize {
         match self {
-            Special::Preamble => 0,
+            Special::Prologue => 0,
             Special::Brif(brif_data) => brif_data.params.len(),
             Special::Jump(_jump_data) => 1,
         }
     }
     pub fn get_block_call(&self, index: usize) -> &BlockCall {
         match self {
-            Special::Preamble => unreachable!(),
+            Special::Prologue => unreachable!(),
             Special::Brif(brif_data) => &brif_data.params[index],
             Special::Jump(jump_data) => &jump_data.call,
         }
@@ -311,15 +311,15 @@ impl Section {
             lir_inst: vec![],
             ir_inst: vec![],
             ir_regs: vec![],
-            special: Some(Special::Preamble),
+            special: Some(Special::Prologue),
             is_lowered: true,
         }
     }
     pub fn is_lowered(&self) -> bool {
         self.is_lowered
     }
-    pub fn is_preamble(&self) -> bool {
-        self.special == Some(Special::Preamble)
+    pub fn is_prologue(&self) -> bool {
+        self.special == Some(Special::Prologue)
     }
     pub fn is_branch(&self) -> bool {
         matches!(self.special, Some(Special::Brif(_)))
@@ -792,7 +792,7 @@ impl Function {
             for s in b.sections.iter_mut() {
                 // let lirs = &mut s.lir_inst;
                 let mut lirs = vec![];
-                if s.is_preamble() {
+                if s.is_prologue() {
                     // Create a nop for each argument... that will ultimately def the argument.
                     for arg_v in self.fun_args.iter() {
                         lirs.push(new_op(Op::Nop).with_def(&[(*arg_v)]));
@@ -1139,7 +1139,7 @@ impl Function {
 
         for b in self.blocks.iter_mut() {
             for s in b.sections.iter_mut() {
-                if s.is_preamble() {
+                if s.is_prologue() {
                     // Skipping the function prologue and epilogue for now, but we still need to do some moves to
                     // make the calling convention work out.
                     // We only need a preamble once we need to use stack variables... though technically we have the
@@ -1511,7 +1511,7 @@ impl RegWrapper {
                         if is_last_inst {
                             if let Some(special) = s.special.as_ref() {
                                 match special {
-                                    Special::Preamble => {}
+                                    Special::Prologue => {}
                                     Special::Brif(brif_data) => {
                                         let key = (regblock, reg_inst);
                                         let mut block_values = vec![];
@@ -1565,7 +1565,7 @@ impl RegWrapper {
                         let mut description = data.simple_string();
                         if let Some(special) = s.special.as_ref() {
                             match special {
-                                Special::Preamble => {}
+                                Special::Prologue => {}
                                 Special::Brif(brif_data) => {
                                     if is_last_inst {
                                         description += &format!(
@@ -1624,7 +1624,7 @@ impl RegWrapper {
                         // If this is a branch, add the values used by the block calls as use operands.
                         if let Some(special) = &s.special {
                             match &special {
-                                Special::Preamble => todo!(),
+                                Special::Prologue => todo!(),
                                 Special::Brif(data) => {
                                     for b in data.params.iter() {
                                         for branch_param in b.params.iter() {
@@ -1709,7 +1709,7 @@ impl RegWrapper {
 
                         if let Some(special) = s.special.as_ref() {
                             match special {
-                                Special::Preamble => {}
+                                Special::Prologue => {}
                                 Special::Brif(brif_data) => {
                                     let key = (regblock, reg_inst);
                                     let mut block_values = vec![];
