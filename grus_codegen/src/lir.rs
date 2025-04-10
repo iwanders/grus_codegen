@@ -1098,6 +1098,14 @@ impl Function {
                                         *z = LirOperand::Machine(cg::Operand::Reg(rg2x(
                                             use_allocs[index].as_reg().unwrap(),
                                         )));
+                                    } else if this_alloc.is_stack() {
+                                        warn!("NEEDS WORK HERE");
+                                        *z = LirOperand::Machine(cg::Operand::RegOffset(
+                                            cg::RegOffset {
+                                                reg: cg::Reg::ESP,
+                                                offset: cg::Offset::Immediate(0),
+                                            },
+                                        ))
                                     } else {
                                         todo!("need to handle allocation: {this_alloc:?}");
                                     }
@@ -1542,6 +1550,9 @@ impl RegWrapper {
                                         cg::Operand::Reg(r) => {
                                             todo!("{r:?}");
                                         }
+                                        cg::Operand::RegOffset(r) => {
+                                            todo!("{r:?}");
+                                        }
                                     }
                                 }
                                 LirOperand::ProgramPoint(_) => {}
@@ -1570,6 +1581,9 @@ impl RegWrapper {
                                         }
                                         cg::Operand::Reg(r) => {
                                             todo!("{r:?} for {data:?}");
+                                        }
+                                        cg::Operand::RegOffset(r) => {
+                                            todo!("{r:?}");
                                         }
                                     }
                                 }

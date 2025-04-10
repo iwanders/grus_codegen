@@ -174,6 +174,19 @@ pub const CALLING_CONVENTION_REGISTERS: [Reg; 6] =
     [Reg::EDI, Reg::ESI, Reg::EDX, Reg::ECX, Reg::R8, Reg::R9];
 
 #[derive(Debug, Copy, Clone)]
+pub enum Offset {
+    /// Offset by a register value and a scaling of that value.
+    Reg { reg: Reg, scale: usize },
+    /// An immediate value.
+    Immediate(i64),
+}
+#[derive(Debug, Copy, Clone)]
+pub struct RegOffset {
+    pub reg: Reg,
+    pub offset: Offset,
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum Operand {
     /// A direct register.
     Reg(Reg),
@@ -182,6 +195,8 @@ pub enum Operand {
     // TODO: Magic stuff [EAX] and [--][--], page 36.
     // Memory(Reg)?
     // MemoryOffset(RegBase, RegOffset)?
+    //
+    RegOffset(RegOffset),
 }
 
 pub type OperandVec = ArrayVec<Operand, 4>;
@@ -511,6 +526,9 @@ impl Instruction {
                     }
                     Operand::Immediate(_) => {
                         panic!("got immediate for setCC destination");
+                    }
+                    Operand::RegOffset(_) => {
+                        todo!()
                     }
                 }
             }
