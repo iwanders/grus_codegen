@@ -93,6 +93,12 @@ pub enum Op {
     ///
     /// Generate breakpoint trap.
     Int3,
+
+    /// Push - Push a value onto the stack
+    Push,
+
+    /// Pop - Pop a value from the stack
+    Pop,
 }
 
 impl Op {
@@ -110,6 +116,8 @@ impl Op {
             Op::Nop => 0..=0,
             Op::Jump => 1..=1,
             Op::Int3 => 0..=0,
+            Op::Push => 1..=1,
+            Op::Pop => 1..=1,
         }
     }
     pub fn is_return(&self) -> bool {
@@ -239,10 +247,12 @@ const INT3: u8 = 0xCC;
 const NOP: u8 = 0x90;
 
 pub enum ModSpec {
-    Memory,           // 0b00
+    Memory, // 0b00
+    MemoryExtension(u8),
     MemoryDisp8,      // 0b01
     MemoryDisp32,     // 0b10
     RegisterRegister, // 0b11,
+    RegisterExtension(u8),
 }
 
 impl Instruction {
@@ -291,11 +301,31 @@ impl Instruction {
         let lb = z.last_mut().unwrap();
         *lb |= lower;
         *lb |= match modspec {
-            ModSpec::Memory => 0b00,
+            ModSpec::Memory | ModSpec::MemoryExtension(_) => 0b00,
             ModSpec::MemoryDisp8 => 0b01,
             ModSpec::MemoryDisp32 => 0b10,
             ModSpec::RegisterRegister => 0b11,
+            ModSpec::RegisterExtension(_) => 0b11,
         } << 6;
+
+        match modspec {
+            ModSpec::MemoryExtension(v) => {
+                // v goes into register slot of modrm
+                if v > 7 {
+                    panic!("got an instruction index exceeding 7");
+                }
+                rex |= ((v >> 3) & 0b1) << 2;
+                *lb |= (v & 0b111) << 4;
+            }
+            ModSpec::RegisterExtension(v) => {
+                if v > 7 {
+                    panic!("got an instruction index exceeding 7");
+                }
+                rex |= ((v >> 3) & 0b1) << 2;
+                *lb |= (v & 0b111) << 3;
+            }
+            _ => {}
+        }
 
         Ok((Rex(rex), z))
     }
@@ -387,8 +417,12 @@ impl Instruction {
                         v.push(0x2B);
                         v.push(modrm.into());
                     }
-                    (Operand::Reg(_r), Operand::Immediate(_b)) => {
-                        todo!()
+                    (Operand::Reg(r), Operand::Immediate(b)) => {
+                        let (rex, opcode) =
+                            Self::addr_reg(r, &[0x83, 0x00], width, ModSpec::RegisterExtension(5))?;
+                        v.push(rex.into());
+                        v.extend(opcode.iter());
+                        v.extend((b as i32).to_le_bytes());
                     }
                     _ => todo!(),
                 }
@@ -506,6 +540,25 @@ impl Instruction {
                 if let Operand::Immediate(value) = offset {
                     v.push(JUMP_REL32);
                     v.extend((value as i32).to_le_bytes());
+                }
+            }
+            Op::Push => {
+                let r = self.operands[0];
+                const PUSH_R64: u8 = 0x50;
+                if let Operand::Reg(r) = r {
+                    v.push(PUSH_R64 + r.index());
+                } else {
+                    todo!();
+                }
+            }
+
+            Op::Pop => {
+                let r = self.operands[0];
+                const POP_R64: u8 = 0x58;
+                if let Operand::Reg(r) = r {
+                    v.push(POP_R64 + r.index());
+                } else {
+                    todo!();
                 }
             }
             Op::Nop => {

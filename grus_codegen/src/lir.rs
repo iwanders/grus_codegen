@@ -417,6 +417,8 @@ pub struct Function {
     program_points: RefCell<HashMap<ProgramPoint, CodePosition>>,
 
     value_counter: RefCell<u32>,
+
+    stack_slots: usize,
 }
 
 impl Function {
@@ -432,6 +434,7 @@ impl Function {
             block_map: Default::default(),
             value_counter: Default::default(),
             program_points: Default::default(),
+            stack_slots: Default::default(),
         }
     }
 
@@ -1068,6 +1071,8 @@ impl Function {
             todo!("Need to handle edits");
         }
 
+        self.stack_slots = regs.num_spillslots;
+
         // Loop must match the order in the wrapper creator.
         for (reginst, info) in wrapper.inst_info.iter() {
             //println!("regs: {regs:#?}");
@@ -1140,17 +1145,11 @@ impl Function {
         for b in self.blocks.iter_mut() {
             for s in b.sections.iter_mut() {
                 if s.is_prologue() {
-                    // Skipping the function prologue and epilogue for now, but we still need to do some moves to
-                    // make the calling convention work out.
                     // We only need a preamble once we need to use stack variables... though technically we have the
                     // red zone https://en.wikipedia.org/wiki/Red_zone_(computing) because we don't yet support calling
                     // other functions.
-                    /*
-                      pub const EAX: Reg = Reg(0b000);
-                      pub const ECX: Reg = Reg(0b001);
-                      pub const EDX: Reg = Reg(0b010);
-                      pub const EBX: Reg = Reg(0b011);
-                    */
+
+                    // Handle the calling convention, currently the nops are ordered correctly.
                     let arg_count = self.fun_args.len();
                     if arg_count > 6 {
                         todo!("handle functions with more than 6 arguments");
@@ -1167,6 +1166,49 @@ impl Function {
                         instructiondata.operation = cg::Op::Mov(Width::W64);
                         instructiondata.use_operands = vec![cg::Operand::Reg(*input_reg).into()];
                         println!("instructiondata: {instructiondata:?}");
+                    }
+
+                    // Then insert the prologue
+                    //
+
+                    // For now, lets always add the function preamble.
+
+                    // prologue is
+                    //   1. push ebp
+                    //   2. move esp into ebp
+                    //   3. sub esp N
+                    // 1. Push ebp:
+                    let instdata = InstructionData::new(cg::Op::Push)
+                        .with_use(&[LirOperand::Machine(cg::Operand::Reg(cg::Reg::EBP))]);
+                    let new_id = Inst(self.instdata.len());
+                    self.instdata.push(instdata);
+                    s.lir_inst.insert(0, new_id);
+                    // 2. move esp into ebp
+                    //
+                    let instdata = InstructionData::new(cg::Op::Mov(cg::Width::W64))
+                        .with_use(&[LirOperand::Machine(cg::Operand::Reg(cg::Reg::ESP))])
+                        .with_def(&[LirOperand::Machine(cg::Operand::Reg(cg::Reg::EBP))]);
+
+                    let new_id = Inst(self.instdata.len());
+                    self.instdata.push(instdata);
+                    s.lir_inst.insert(1, new_id);
+
+                    // 3. Finally, subtract from the stack pointer by the number of stack slots.
+                    //
+                    // I'm actually not sure we need this... given that we can rely on the stack to magically
+                    // grow when we just use it...
+                    //
+                    if false {
+                        let stack_slots = self.stack_slots;
+                        let instdata = InstructionData::new(cg::Op::ISub(cg::Width::W64))
+                            .with_use(&[
+                                LirOperand::Machine(cg::Operand::Reg(cg::Reg::ESP)),
+                                LirOperand::Machine(cg::Operand::Immediate(stack_slots as i64)),
+                            ])
+                            .with_def(&[LirOperand::Machine(cg::Operand::Reg(cg::Reg::ESP))]);
+                        let new_id = Inst(self.instdata.len());
+                        self.instdata.push(instdata);
+                        s.lir_inst.insert(2, new_id);
                     }
                 }
                 println!("section: {s:?}");
@@ -1211,11 +1253,40 @@ impl Function {
                                     todo!()
                                 }
 
+                                // Pop the ebp register.
+                                /*
+                                let instdata = InstructionData::new(cg::Op::Mov(cg::Width::W64))
+                                    .with_use(&[LirOperand::Machine(cg::Operand::Reg(
+                                        cg::Reg::ESP,
+                                    ))])
+                                    .with_def(&[LirOperand::Machine(cg::Operand::Reg(
+                                        cg::Reg::EBP,
+                                    ))]);
+
+                                let new_id = Inst(self.instdata.len());
+                                self.instdata.push(instdata);
+                                s.lir_inst.insert(1, new_id);*/
+
+                                // This is thus the epilogue.
+                                //  Move ebp back into esp
+                                //  pop ebp
+                                //  return.
+
+                                lirs.push(
+                                    new_op(Op::Mov(Width::W64))
+                                        .with_use(&[Operand::Reg(cg::Reg::EBP)])
+                                        .with_def(&[Operand::Reg(cg::Reg::ESP)]),
+                                );
+
+                                lirs.push(new_op(Op::Pop).with_use(&[Operand::Reg(cg::Reg::EBP)]));
+
+                                // Move the return value.
                                 lirs.push(
                                     new_op(Op::Mov(Width::W64))
                                         .with_use(&[Operand::Reg(s.ir_regs[ii][0])])
                                         .with_def(&[Operand::Reg(cg::Reg::EAX)]),
                                 );
+                                // Return.
                                 lirs.push(new_op(Op::Return));
                             }
                             _ => todo!(
