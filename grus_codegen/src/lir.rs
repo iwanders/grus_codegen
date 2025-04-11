@@ -1374,26 +1374,45 @@ impl Function {
         let mut dist_from_rear = 0;
 
         // Build the function from the rear, that way we know for sure that all code points have been encountered.
-        for b in self.blocks.iter().rev() {
-            for s in b.sections.iter().rev() {
-                for i in s.lir_inst.iter().rev() {
-                    debug!("assembling: {:?}", self.instdata[i.0]);
-                    let mut instdata_copy = self.instdata[i.0].clone();
-                    for op in instdata_copy.operands_iter_mut() {
-                        if let LirOperand::ProgramPoint(p) = op {
-                            let offset = tracker.relative(*p, dist_from_rear);
+        //
 
-                            *op = LirOperand::Machine(cg::Operand::Immediate(offset));
-                        }
-                    }
-                    println!("instdata_copy: {instdata_copy:?}");
-                    let z = instdata_copy.assemble().unwrap();
-                    dist_from_rear += z.len();
-                    v.push(z);
-                }
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        enum Stage {
+            CodePoints,
+            Actual,
+        }
+        for stage in [Stage::CodePoints, Stage::Actual] {
+            v.clear();
+            if stage == Stage::Actual {
+                println!("tracker: {tracker:#?}");
             }
-            // Only when we reach the end of the sections in the block, do we find the block start position.
-            tracker.add_blockstart(&self, b.id, dist_from_rear);
+            for b in self.blocks.iter().rev() {
+                for s in b.sections.iter().rev() {
+                    for i in s.lir_inst.iter().rev() {
+                        debug!("assembling: {:?}", self.instdata[i.0]);
+                        let mut instdata_copy = self.instdata[i.0].clone();
+                        for op in instdata_copy.operands_iter_mut() {
+                            if let LirOperand::ProgramPoint(p) = op {
+                                match stage {
+                                    Stage::CodePoints => {
+                                        *op = LirOperand::Machine(cg::Operand::Immediate(0));
+                                    }
+                                    Stage::Actual => {
+                                        let offset = tracker.relative(*p, dist_from_rear);
+                                        *op = LirOperand::Machine(cg::Operand::Immediate(offset));
+                                    }
+                                }
+                            }
+                        }
+                        println!("instdata_copy: {instdata_copy:?}");
+                        let z = instdata_copy.assemble().unwrap();
+                        dist_from_rear += z.len();
+                        v.push(z);
+                    }
+                }
+                // Only when we reach the end of the sections in the block, do we find the block start position.
+                tracker.add_blockstart(&self, b.id, dist_from_rear);
+            }
         }
 
         // Finally, reverse the assembled instructions, and out falls the function.
