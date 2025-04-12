@@ -22,16 +22,26 @@ extern "C" fn sigtrap_handler(_sig: c_int, info: *mut libc::siginfo_t, context: 
 
         // The general purpose reigsters.
         // EAX   ECX   EDX   EBX   ESP   EBP   ESI   EDI
-        debug!("REG_RAX 0x{:0>8x}", mcontext.gregs[libc::REG_RAX as usize]);
-        debug!("REG_RCX 0x{:0>8x}", mcontext.gregs[libc::REG_RCX as usize]);
-        debug!("REG_RDX 0x{:0>8x}", mcontext.gregs[libc::REG_RDX as usize]);
-        debug!("REG_RBX 0x{:0>8x}", mcontext.gregs[libc::REG_RBX as usize]);
-        debug!("REG_RSP 0x{:0>8x}", mcontext.gregs[libc::REG_RSP as usize]);
-        debug!("REG_RSI 0x{:0>8x}", mcontext.gregs[libc::REG_RSI as usize]);
-        debug!("REG_RDI 0x{:0>8x}", mcontext.gregs[libc::REG_RDI as usize]);
+        debug!("REG_RAX 0x{:0>16x}", mcontext.gregs[libc::REG_RAX as usize]);
+        debug!("REG_RCX 0x{:0>16x}", mcontext.gregs[libc::REG_RCX as usize]);
+        debug!("REG_RDX 0x{:0>16x}", mcontext.gregs[libc::REG_RDX as usize]);
+        debug!("REG_RBX 0x{:0>16x}", mcontext.gregs[libc::REG_RBX as usize]);
+        debug!("REG_RSP 0x{:0>16x}", mcontext.gregs[libc::REG_RSP as usize]);
+        debug!("REG_RSI 0x{:0>16x}", mcontext.gregs[libc::REG_RSI as usize]);
+        debug!("REG_RDI 0x{:0>16x}", mcontext.gregs[libc::REG_RDI as usize]);
 
         // The instruction position
-        debug!("REG_RIP 0x{:0>8x}", mcontext.gregs[libc::REG_RIP as usize]);
+        debug!("REG_RIP 0x{:0>16x}", mcontext.gregs[libc::REG_RIP as usize]);
+        // The base pointer and first value.
+        debug!(
+            "REG_RBP     0x{:0>16x}",
+            mcontext.gregs[libc::REG_RBP as usize]
+        );
+        let stack = std::mem::transmute::<_, *const u64>(mcontext.gregs[libc::REG_RBP as usize]);
+        debug!("REG_RBP[ 1] 0x{:0>16x}", *stack.offset(1));
+        debug!("REG_RBP[ 0] 0x{:0>16x}", *stack);
+        debug!("REG_RBP[-1] 0x{:0>16x}", *stack.offset(-1));
+        debug!("REG_RBP[-2] 0x{:0>16x}", *stack.offset(-2));
     }
     // Return from the sigtrap handler allows continuing from where it was triggered, in this case after the int3.
 }

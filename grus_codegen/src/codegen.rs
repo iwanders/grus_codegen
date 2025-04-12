@@ -492,6 +492,7 @@ impl Instruction {
                     }
 
                     (Operand::RegOffset(reg_offset), Operand::Immediate(b)) => {
+                        v.push(INT3);
                         let (rex, opcode) = Self::addr_reg(
                             reg_offset.reg,
                             &[0xF7, 0],
@@ -559,6 +560,7 @@ impl Instruction {
                         panic!("got immediate for setCC destination");
                     }
                     Operand::RegOffset(reg_offset) => {
+                        v.push(INT3);
                         let (rex, opcode) = Self::addr_reg(
                             reg_offset.reg,
                             &opcode,
