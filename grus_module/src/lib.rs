@@ -154,8 +154,8 @@ impl ObjectModule {
         }
         *defined = true;
 
-        let function_alignment = 32;
-        let symbol_alignment = 32;
+        let function_alignment = 0x1000;
+        let symbol_alignment = 0x1000;
         let align = alignment.max(function_alignment).max(symbol_alignment);
 
         let section = self.object.section_id(StandardSection::Text);
