@@ -180,6 +180,15 @@ pub enum Offset {
     /// An immediate value.
     Immediate(i64),
 }
+impl Offset {
+    pub fn as_immediate(&self) -> Option<i64> {
+        match *self {
+            Offset::Immediate(a) => Some(a),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct RegOffset {
     pub reg: Reg,
@@ -434,7 +443,7 @@ impl Instruction {
                     }
                     (Operand::Reg(r), Operand::Immediate(b)) => {
                         let (rex, opcode) =
-                            Self::addr_reg(r, &[0x83, 0x00], width, ModSpec::RegisterExtension(5))?;
+                            Self::addr_reg(r, &[0x81, 0x00], width, ModSpec::RegisterExtension(5))?;
                         v.push(rex.into());
                         v.extend(opcode.iter());
                         v.extend((b as i32).to_le_bytes());
@@ -481,7 +490,29 @@ impl Instruction {
                         v.extend(opcode.iter());
                         v.extend((b as u32).to_le_bytes());
                     }
-                    _ => todo!(),
+
+                    (Operand::RegOffset(reg_offset), Operand::Immediate(b)) => {
+                        let (rex, opcode) = Self::addr_reg(
+                            reg_offset.reg,
+                            &[0xF7, 0],
+                            width,
+                            ModSpec::MemoryDisp32,
+                        )?;
+                        v.push(rex.into());
+                        v.extend(opcode.iter());
+                        v.extend(
+                            (reg_offset
+                                .offset
+                                .as_immediate()
+                                .expect("unhandled reg offset")
+                                as i32)
+                                .to_le_bytes(),
+                        );
+                        v.extend((b as u32).to_le_bytes());
+                    }
+                    _ => {
+                        todo!()
+                    }
                 }
             }
             Op::Cmp(width) => {
@@ -502,23 +533,23 @@ impl Instruction {
             }
             Op::SetCC(cond) => {
                 let r = self.operands[0];
+                let opcode = match cond {
+                    Condition::IfLess => {
+                        const SET_BYTE_IF_LESS_SF_NE_OF: [u8; 3] = [0x0F, 0x9C, 0x00];
+                        SET_BYTE_IF_LESS_SF_NE_OF
+                    }
+                    Condition::IfGreater => {
+                        const SET_BYTE_IF_GREATER_ZF_EQ_0_AND_SF_EQ_OF: [u8; 3] =
+                            [0x0F, 0x9F, 0x00];
+                        SET_BYTE_IF_GREATER_ZF_EQ_0_AND_SF_EQ_OF
+                    }
+
+                    _ => {
+                        todo!("handle cond: {cond:?}");
+                    }
+                };
                 match r {
                     Operand::Reg(r) => {
-                        let opcode = match cond {
-                            Condition::IfLess => {
-                                const SET_BYTE_IF_LESS_SF_NE_OF: [u8; 3] = [0x0F, 0x9C, 0x00];
-                                SET_BYTE_IF_LESS_SF_NE_OF
-                            }
-                            Condition::IfGreater => {
-                                const SET_BYTE_IF_GREATER_ZF_EQ_0_AND_SF_EQ_OF: [u8; 3] =
-                                    [0x0F, 0x9F, 0x00];
-                                SET_BYTE_IF_GREATER_ZF_EQ_0_AND_SF_EQ_OF
-                            }
-
-                            _ => {
-                                todo!("handle cond: {cond:?}");
-                            }
-                        };
                         let (rex, opcode) =
                             Self::addr_reg(r, &opcode, Width::W8, ModSpec::RegisterRegister)?;
                         v.push(rex.into());
@@ -527,8 +558,23 @@ impl Instruction {
                     Operand::Immediate(_) => {
                         panic!("got immediate for setCC destination");
                     }
-                    Operand::RegOffset(_) => {
-                        todo!()
+                    Operand::RegOffset(reg_offset) => {
+                        let (rex, opcode) = Self::addr_reg(
+                            reg_offset.reg,
+                            &opcode,
+                            Width::W8,
+                            ModSpec::MemoryDisp32,
+                        )?;
+                        v.push(rex.into());
+                        v.extend(opcode.iter());
+                        v.extend(
+                            (reg_offset
+                                .offset
+                                .as_immediate()
+                                .expect("unhandled reg offset")
+                                as i32)
+                                .to_le_bytes(),
+                        );
                     }
                 }
             }

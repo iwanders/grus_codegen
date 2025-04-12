@@ -1208,12 +1208,17 @@ impl Function {
                     // I'm actually not sure we need this... given that we can rely on the stack to magically
                     // grow when we just use it...
                     //
-                    if false {
-                        let stack_slots = self.stack_slots;
+                    if true {
+                        let stack_space = self.stack_slots * 8;
+                        let stack_space = if (stack_space % 16 == 0) {
+                            stack_space
+                        } else {
+                            stack_space + 8
+                        };
                         let instdata = InstructionData::new(cg::Op::ISub(cg::Width::W64))
                             .with_use(&[
                                 LirOperand::Machine(cg::Operand::Reg(cg::Reg::ESP)),
-                                LirOperand::Machine(cg::Operand::Immediate(stack_slots as i64)),
+                                LirOperand::Machine(cg::Operand::Immediate(stack_space as i64)),
                             ])
                             .with_def(&[LirOperand::Machine(cg::Operand::Reg(cg::Reg::ESP))]);
                         let new_id = Inst(self.instdata.len());
