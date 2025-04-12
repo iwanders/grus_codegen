@@ -1099,11 +1099,13 @@ impl Function {
                                             use_allocs[index].as_reg().unwrap(),
                                         )));
                                     } else if this_alloc.is_stack() {
-                                        warn!("NEEDS WORK HERE");
+                                        let stack_slot = this_alloc.as_stack().unwrap();
+                                        let stack_index = stack_slot.index();
+                                        let stack_pos = (stack_index * 8) as i64;
                                         *z = LirOperand::Machine(cg::Operand::RegOffset(
                                             cg::RegOffset {
-                                                reg: cg::Reg::ESP,
-                                                offset: cg::Offset::Immediate(0),
+                                                reg: cg::Reg::EBP,
+                                                offset: cg::Offset::Immediate(stack_pos),
                                             },
                                         ))
                                     } else {
@@ -1371,7 +1373,6 @@ impl Function {
         let mut v = vec![];
 
         let mut tracker = CodePointTracker::default();
-        let mut dist_from_rear = 0;
 
         // Build the function from the rear, that way we know for sure that all code points have been encountered.
         //
@@ -1383,6 +1384,7 @@ impl Function {
         }
         for stage in [Stage::CodePoints, Stage::Actual] {
             v.clear();
+            let mut dist_from_rear = 0;
             if stage == Stage::Actual {
                 println!("tracker: {tracker:#?}");
             }
@@ -1398,7 +1400,10 @@ impl Function {
                                         *op = LirOperand::Machine(cg::Operand::Immediate(0));
                                     }
                                     Stage::Actual => {
-                                        let offset = tracker.relative(*p, dist_from_rear);
+                                        let mut offset = tracker.relative(*p, dist_from_rear);
+                                        if offset == 0x5f {
+                                            dbg!(s);
+                                        }
                                         *op = LirOperand::Machine(cg::Operand::Immediate(offset));
                                     }
                                 }
@@ -1410,8 +1415,10 @@ impl Function {
                         v.push(z);
                     }
                 }
-                // Only when we reach the end of the sections in the block, do we find the block start position.
-                tracker.add_blockstart(&self, b.id, dist_from_rear);
+                if stage == Stage::CodePoints {
+                    // Only when we reach the end of the sections in the block, do we find the block start position.
+                    tracker.add_blockstart(&self, b.id, dist_from_rear);
+                }
             }
         }
 
