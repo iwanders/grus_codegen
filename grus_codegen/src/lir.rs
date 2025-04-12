@@ -1254,7 +1254,33 @@ impl Function {
                         self.instdata.push(l);
                     }
                 }
-
+                // Patch up any SetCC to ensure we wipe the upper 58 bytes...
+                if true {
+                    todo!("Problem is that setcc only sets the lowest byte, while the remainder stays constant");
+                    let mut instruction_inserts = vec![];
+                    for (ii, i) in s.lir_inst.iter_mut().enumerate() {
+                        let real_inst = &mut self.instdata[i.0];
+                        match real_inst.operation {
+                            // Be sure to wipe the destination of SetCC first.
+                            cg::Op::SetCC(_) => {
+                                instruction_inserts.push((
+                                    ii,
+                                    new_op(Op::Mov(Width::W64))
+                                        .with_def(&real_inst.def_operands.clone())
+                                        .with_use(&[cg::Operand::Immediate(0)]),
+                                ));
+                            }
+                            _ => {}
+                        }
+                    }
+                    instruction_inserts.reverse();
+                    for (insert_pos, instdata) in instruction_inserts {
+                        let new_id = Inst(self.instdata.len());
+                        s.lir_inst.push(new_id);
+                        self.instdata.push(instdata);
+                        s.lir_inst.insert(insert_pos, new_id);
+                    }
+                }
                 if s.is_lowered() {
                     continue;
                 }

@@ -1,0 +1,25 @@
+test run
+target x86_64
+
+function %icmp_ult_branch(i64, i64) -> i64 {
+block0(v0: i64,v1: i64):
+    v2 = icmp ult v0, v1
+    brif v2, block1, block2
+block1:
+    v3 = iconst.i64 1
+    return v3
+block2:
+    v4 = iconst.i64 2
+    return v4
+}
+; run: %icmp_ult_branch(4, 5) == 1
+; run: %icmp_ult_branch(6, 5) == 2
+; run: %icmp_ult_branch(5, 5) == 2
+; run: %icmp_ult_branch(5, 0) == 2
+; run: %icmp_ult_branch(5, 1) == 2
+; run: %icmp_ult_branch(0, 1) == 1
+; run: %icmp_ult_branch(0, 0) == 2
+; run: %icmp_ult_branch(1, 0) == 2
+; run: %icmp_ult_branch(3, 0) == 2
+; run: %icmp_ult_branch(3, 1) == 2
+; run: %icmp_ult_branch(3, 8) == 1
