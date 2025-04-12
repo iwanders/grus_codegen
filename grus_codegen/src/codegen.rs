@@ -56,6 +56,9 @@ pub enum Op {
     ///
     /// IMUL r16,r/m16   IMUL r32,r/m32  IMUL r64,r/m64
     IMul(Width),
+    /// And - Bitwise And
+    ///
+    And(Width),
     /// RET - Return from procedure
     Return,
     /// TEST - Logical Compare
@@ -107,6 +110,7 @@ impl Op {
             Op::Mov(_) => 2..=2,
             Op::IAdd(_) => 2..=2,
             Op::ISub(_) => 2..=2,
+            Op::And(_) => 2..=2,
             Op::IMul(_) => 2..=2, // heh, technically 1..=3... with 3 only with intermediate, 1 for eax
             Op::Return => 0..=0,
             Op::Test(_) => 2..=2,
@@ -273,8 +277,9 @@ const NOP: u8 = 0x90;
 pub enum ModSpec {
     Memory, // 0b00
     MemoryExtension(u8),
-    MemoryDisp8,      // 0b01
-    MemoryDisp32,     // 0b10
+    MemoryDisp8,  // 0b01
+    MemoryDisp32, // 0b10
+    MemoryDisp32Extension(u8),
     RegisterRegister, // 0b11,
     RegisterExtension(u8),
 }
@@ -328,6 +333,7 @@ impl Instruction {
             ModSpec::Memory | ModSpec::MemoryExtension(_) => 0b00,
             ModSpec::MemoryDisp8 => 0b01,
             ModSpec::MemoryDisp32 => 0b10,
+            ModSpec::MemoryDisp32Extension(_) => 0b10,
             ModSpec::RegisterRegister => 0b11,
             ModSpec::RegisterExtension(_) => 0b11,
         } << 6;
@@ -342,6 +348,14 @@ impl Instruction {
                 *lb |= (v & 0b111) << 4;
             }
             ModSpec::RegisterExtension(v) => {
+                if v > 7 {
+                    panic!("got an instruction index exceeding 7");
+                }
+                rex |= ((v >> 3) & 0b1) << 2;
+                *lb |= (v & 0b111) << 3;
+            }
+
+            ModSpec::MemoryDisp32Extension(v) => {
                 if v > 7 {
                     panic!("got an instruction index exceeding 7");
                 }
@@ -465,6 +479,42 @@ impl Instruction {
                     }
                     (Operand::Reg(_r), Operand::Immediate(_b)) => {
                         todo!()
+                    }
+                    _ => todo!(),
+                }
+            }
+            Op::And(width) => {
+                let dest = self.operands[0];
+                let src = self.operands[1];
+                match (dest, src) {
+                    (Operand::Reg(r), Operand::Reg(b)) => {
+                        todo!();
+                    }
+                    (Operand::Reg(r), Operand::Immediate(b)) => {
+                        let (rex, opcode) =
+                            Self::addr_reg(r, &[0x81, 0x00], width, ModSpec::RegisterExtension(4))?;
+                        v.push(rex.into());
+                        v.extend(opcode.iter());
+                        v.extend((b as i32).to_le_bytes());
+                    }
+                    (Operand::RegOffset(reg_offset), Operand::Immediate(b)) => {
+                        let (rex, opcode) = Self::addr_reg(
+                            reg_offset.reg,
+                            &[0x81, 0],
+                            width,
+                            ModSpec::MemoryDisp32Extension(4),
+                        )?;
+                        v.push(rex.into());
+                        v.extend(opcode.iter());
+                        v.extend(
+                            (reg_offset
+                                .offset
+                                .as_immediate()
+                                .expect("unhandled reg offset")
+                                as i32)
+                                .to_le_bytes(),
+                        );
+                        v.extend((b as u32).to_le_bytes());
                     }
                     _ => todo!(),
                 }
