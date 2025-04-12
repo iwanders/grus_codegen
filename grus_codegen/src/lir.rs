@@ -1210,7 +1210,7 @@ impl Function {
                     //
                     if true {
                         let stack_space = self.stack_slots * 8;
-                        let stack_space = if (stack_space % 16 == 0) {
+                        let stack_space = if stack_space % 16 == 0 {
                             stack_space
                         } else {
                             stack_space + 8
@@ -1255,7 +1255,7 @@ impl Function {
                     }
                 }
                 // Patch up any SetCC to ensure we wipe the upper 58 bytes...
-                if false {
+                if true {
                     let mut instruction_inserts = vec![];
                     for (ii, i) in s.lir_inst.iter_mut().enumerate() {
                         let real_inst = &mut self.instdata[i.0];
@@ -1275,9 +1275,8 @@ impl Function {
                     instruction_inserts.reverse();
                     for (insert_pos, instdata) in instruction_inserts {
                         let new_id = Inst(self.instdata.len());
-                        s.lir_inst.push(new_id);
                         self.instdata.push(instdata);
-                        s.lir_inst.insert(insert_pos, new_id);
+                        s.lir_inst.insert(insert_pos + 1, new_id);
                     }
                 }
                 if s.is_lowered() {
