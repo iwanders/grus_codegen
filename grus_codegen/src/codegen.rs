@@ -575,8 +575,36 @@ impl Instruction {
                         v.push(0x3B);
                         v.push(modrm.into());
                     }
-                    (Operand::Reg(_r), Operand::Immediate(_b)) => {
-                        todo!();
+                    (Operand::Reg(r), Operand::Immediate(b)) => {
+                        if width == Width::W8 {
+                            todo!(); // something special with AH, BH,CH, DH
+                        }
+
+                        let (rex, opcode) =
+                            Self::addr_reg(r, &[0x81, 0], width, ModSpec::RegisterExtension(7))?;
+                        v.push(rex.into());
+                        v.extend(opcode.iter());
+                        v.extend((b as u32).to_le_bytes());
+                    }
+                    (Operand::RegOffset(reg_offset), Operand::Immediate(b)) => {
+                        let (rex, opcode) = Self::addr_reg(
+                            reg_offset.reg,
+                            &[0x81, 0],
+                            Width::W64,
+                            ModSpec::MemoryDisp32Extension(7),
+                        )?;
+                        v.push(rex.into());
+                        v.extend(opcode.iter());
+
+                        v.extend(
+                            (reg_offset
+                                .offset
+                                .as_immediate()
+                                .expect("unhandled reg offset")
+                                as i32)
+                                .to_le_bytes(),
+                        );
+                        v.extend((b as u32).to_le_bytes());
                     }
                     _ => todo!(),
                 }
@@ -657,6 +685,7 @@ impl Instruction {
                 }
             }
             Op::Push => {
+                //v.push(INT3);
                 let r = self.operands[0];
                 const PUSH_R64: u8 = 0x50;
                 if let Operand::Reg(r) = r {

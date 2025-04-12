@@ -942,9 +942,9 @@ impl Function {
                             debug!("Brif : {arg:#?}  {blocks:#?}");
                             // Model the branch as an instruction that reads one value... ignoring the fact that it
                             // writes values used by the branch for now.
-                            lirs.push(new_op(Op::Test(Width::W64)).with_use::<LirOperand>(&[
+                            lirs.push(new_op(Op::Cmp(Width::W64)).with_use::<LirOperand>(&[
                                 use_ir[0].into(),
-                                LirOperand::Machine(Operand::Immediate(i64::MAX)).into(),
+                                LirOperand::Machine(Operand::Immediate(0)).into(),
                             ]));
 
                             // Collect the arguments that we'll end up using...
@@ -1255,7 +1255,7 @@ impl Function {
                     }
                 }
                 // Patch up any SetCC to ensure we wipe the upper 58 bytes...
-                if true {
+                if false {
                     let mut instruction_inserts = vec![];
                     for (ii, i) in s.lir_inst.iter_mut().enumerate() {
                         let real_inst = &mut self.instdata[i.0];
