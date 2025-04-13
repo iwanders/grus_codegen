@@ -86,6 +86,10 @@ use crate::codegen as cg;
       the moves in those blocks... then jump to the next block without arguments, that way we don't ahve to worry about
       any of this.
 
+
+    Todo?
+      - Patch up any SetCC to ensure we wipe the upper 58 bytes... -> Move that to lower first, no reason for it to be
+        in second?
 */
 
 /*
