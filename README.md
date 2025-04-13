@@ -28,7 +28,7 @@ Rough structure is:
   tool in `grus_codegen` is regalloc2's Ion allocator.
 
 
-### grus_codegen
+## grus_codegen
 
 This is where most things live;
 - `clif_support`: tooling for testing `.clif` files.
@@ -52,7 +52,9 @@ The `isa` merely provides a nice interface to compile an `IrFunction`, it conver
 it calls the correct lowering steps in the correct order and provides the register allocation. Finally, it returns the
 assembled result.
 
-The `lir` does the majority of the work, usually through the following steps.
+
+### Lir; Lower Intermediate Representation
+The `lir` does the majority of the work, the actions are split out in the following phases.
 
 #### Function & Lirify
 The `Function` is created from a `IrFunction`, this just copies the function for local storage.
@@ -62,7 +64,7 @@ can at the same told hold any number of `lir` instructions. A `lir` instruction 
 `Virtual`, which refers to the `IrFunction` virtual registers, it can be a `Machine` type, which is a `cg::Operand`
 (a register or immediate value) or it can be a `ProgramPoint`, which refers to a position in the final x86 bytecode.
 
-### First lower
+#### First lower
 The `lower_first` method is called, this iterates through all the sections and their `IrInstruction`'s and populates
 the `lir_inst` field in the section as best as possible. For some instructions this will become a single `LirInstruction`
 others may lower into multiple. The function prologue is provided with a `Nop` that defines each argument there.
@@ -111,7 +113,7 @@ always of the shape `x = x + y`, so the new value is written to the first operan
 ensure that we move the first operand into the destination register first. We do this after the register allocation such
 that we don't have constraints on our register allocator to handle this.
 
-#### Assemble!
+#### Assemble
 This is the last step of compiling the function. The `LirFunction` now holds `cg::Instructions` for all sections and all
 operands are `Machine`, except the `ProgramPoint` operands, which are the destinations of jumps. These offsets are only
 known after bytecode emission has happened because the instructions are all varying in length. So in this method there's
