@@ -16,6 +16,8 @@ fn test_incremental() -> Result<(), anyhow::Error> {
         "0006b_branch_diverge.clif",
         "0006c_branch_diverge_simpler.clif",
         "0006d_conditionals.clif",
+        "0006e_conditional_branch.clif",
+        "0007_for_loop.clif",
     ];
 
     let test_settings = grus_codegen::clif_support::TestSettings {

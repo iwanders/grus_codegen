@@ -487,7 +487,7 @@ impl Instruction {
                 let dest = self.operands[0];
                 let src = self.operands[1];
                 match (dest, src) {
-                    (Operand::Reg(r), Operand::Reg(b)) => {
+                    (Operand::Reg(_r), Operand::Reg(_b)) => {
                         todo!();
                     }
                     (Operand::Reg(r), Operand::Immediate(b)) => {

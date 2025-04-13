@@ -1430,10 +1430,7 @@ impl Function {
                                         *op = LirOperand::Machine(cg::Operand::Immediate(0));
                                     }
                                     Stage::Actual => {
-                                        let mut offset = tracker.relative(*p, dist_from_rear);
-                                        if offset == 0x5f {
-                                            dbg!(s);
-                                        }
+                                        let offset = tracker.relative(*p, dist_from_rear);
                                         *op = LirOperand::Machine(cg::Operand::Immediate(offset));
                                     }
                                 }
