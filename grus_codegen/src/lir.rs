@@ -1100,8 +1100,8 @@ impl Function {
                                         )));
                                     } else if this_alloc.is_stack() {
                                         let stack_slot = this_alloc.as_stack().unwrap();
-                                        let stack_index = stack_slot.index();
-                                        let stack_pos = (stack_index * 8) as i64;
+                                        let stack_index = -1 * ((stack_slot.index() as i64) + 1);
+                                        let stack_pos = stack_index * 8;
                                         *z = LirOperand::Machine(cg::Operand::RegOffset(
                                             cg::RegOffset {
                                                 reg: cg::Reg::EBP,
@@ -1188,6 +1188,7 @@ impl Function {
                     //   2. move esp into ebp
                     //   3. sub esp N
                     // 1. Push ebp:
+
                     let instdata = InstructionData::new(cg::Op::Push)
                         .with_use(&[LirOperand::Machine(cg::Operand::Reg(cg::Reg::EBP))]);
                     let new_id = Inst(self.instdata.len());
