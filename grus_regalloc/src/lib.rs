@@ -1,5 +1,6 @@
 #![allow(clippy::needless_range_loop)]
 use cranelift_codegen::ir;
+use log::*;
 use regalloc2::Function as RegFunction;
 use regalloc2::Output as RegOutput;
 use regalloc2::{
@@ -23,7 +24,7 @@ Lets just aim to get something naive working first.
 And lets start with local (in-block) allocation only.
 */
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Default)]
 struct AllocationTracker {
@@ -274,7 +275,7 @@ mod winged {
     */
     use super::*;
 
-    use regalloc2::{Inst, OperandKind, VReg};
+    use regalloc2::{Block, Inst, OperandKind, VReg};
 
     type VarMap = std::collections::HashMap<VReg, VariableState>;
 
@@ -341,14 +342,39 @@ mod winged {
 
         // Clunky; iterate over the first blocks for now.
         let start_entry = vec![entry_b];
-        let block_ids: Vec<_> = start_entry
-            .iter()
-            .chain(fun.block_succs(entry_b).iter())
-            .collect();
+        let mut block_ids: HashSet<Block> = Default::default();
+        let mut block_stack = vec![entry_b];
+        while let Some(b) = block_stack.pop() {
+            let successors = fun.block_succs(b).iter().collect::<Vec<_>>();
+            for v in successors.iter() {
+                if block_ids.insert(**v) {
+                    block_stack.push(**v);
+                }
+            }
+        }
+
+        // Iterate over all the blocks and collect the vregs used in each block.
+        let mut vregs_in_block: HashMap<Block, HashSet<VReg>> = Default::default();
         for block in block_ids.iter() {
-            if **block != entry_b {
+            for entry_vreg in fun.block_params(entry_b) {
+                vregs_in_block
+                    .entry(*block)
+                    .or_default()
+                    .insert(*entry_vreg);
+            }
+            for insn in fun.block_insns(*block).iter() {
+                let operands = fun.inst_operands(insn);
+                for vreg in operands.iter().map(|z| z.vreg()) {
+                    vregs_in_block.entry(*block).or_default().insert(vreg);
+                }
+            }
+        }
+        debug!("vregs in block: {vregs_in_block:#?}");
+
+        for block in block_ids.iter() {
+            if *block != entry_b {
                 // This is not the entry block, so the block parameters will... somehow exist.
-                let bparams = fun.block_params(**block);
+                let bparams = fun.block_params(*block);
                 for bparam in bparams.iter() {
                     varmap.insert(
                         *bparam,
@@ -359,7 +385,7 @@ mod winged {
                     );
                 }
             }
-            for insn in fun.block_insns(**block).iter() {
+            for insn in fun.block_insns(*block).iter() {
                 println!("Instzzzz: {insn:?}");
                 let ops = fun.inst_operands(insn);
                 let is_early_first_instruction = Some(insn) == first_instruction;
@@ -437,14 +463,14 @@ mod winged {
         }
 
         for block in block_ids.iter() {
-            if **block != entry_b {
+            if *block != entry_b {
                 // This is not the entry block, so the block parameters need to be in registers..
-                let bparams = fun.block_params(**block);
+                let bparams = fun.block_params(*block);
                 for bparam in bparams.iter() {
                     let _ = machine.def_register(&Operand::any_def(*bparam))?;
                 }
             }
-            for insn in fun.block_insns(**block).iter() {
+            for insn in fun.block_insns(*block).iter() {
                 let ops = fun.inst_operands(insn);
                 let is_first_instruction = Some(insn) == first_instruction;
                 // let is_first_instruction = false;
