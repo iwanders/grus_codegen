@@ -44,7 +44,7 @@ impl AllocationTracker {
         }
     }
     pub fn add_allocation(&mut self, inst: Inst, alloc: Allocation) {
-        println!("adding allocation for {inst:?} and {alloc:?}");
+        //println!("adding allocation for {inst:?} and {alloc:?}");
         if let Some(v) = self.previous_inst.as_mut() {
             if *v != inst {
                 self.inst_alloc_offsets.push(self.allocs.len() as u32);
@@ -341,13 +341,13 @@ mod winged {
         }
 
         // Clunky; iterate over the first blocks for now.
-        let start_entry = vec![entry_b];
-        let mut block_ids: HashSet<Block> = Default::default();
+        let mut block_ids: Vec<Block> = vec![entry_b];
         let mut block_stack = vec![entry_b];
         while let Some(b) = block_stack.pop() {
             let successors = fun.block_succs(b).iter().collect::<Vec<_>>();
             for v in successors.iter() {
-                if block_ids.insert(**v) {
+                if !block_ids.contains(*v) {
+                    block_ids.push(**v);
                     block_stack.push(**v);
                 }
             }
@@ -371,6 +371,9 @@ mod winged {
         }
         debug!("vregs in block: {vregs_in_block:#?}");
 
+        todo!(
+            "We should probably order the blocks such that they 'follow' the flow to a terminator?"
+        );
         for block in block_ids.iter() {
             if *block != entry_b {
                 // This is not the entry block, so the block parameters will... somehow exist.
@@ -386,7 +389,7 @@ mod winged {
                 }
             }
             for insn in fun.block_insns(*block).iter() {
-                println!("Instzzzz: {insn:?}");
+                //println!("Instzzzz: {insn:?}");
                 let ops = fun.inst_operands(insn);
                 let is_early_first_instruction = Some(insn) == first_instruction;
                 for stage in [regalloc2::OperandPos::Early, regalloc2::OperandPos::Late] {
@@ -394,7 +397,7 @@ mod winged {
                         if op.pos() != stage {
                             continue;
                         }
-                        println!("Op: {op:?}, pos: {:?}", op.pos());
+                        //println!("Op: {op:?}, pos: {:?}", op.pos());
                         if is_early_first_instruction
                             && op.kind() == OperandKind::Def
                             && op.pos() == regalloc2::OperandPos::Early
@@ -431,7 +434,7 @@ mod winged {
 
         let mut tracker = AllocationTracker::new();
 
-        println!("varmap: {varmap:#?}");
+        //println!("varmap: {varmap:#?}");
 
         // Populate the machine with the early def's from the first instruction.
         let ops = fun.inst_operands(
@@ -457,10 +460,11 @@ mod winged {
                 }
             }
         }
+        /*
         println!("Machine; {machine:#?}");
         for insn in fun.block_insns(entry_b).iter() {
             println!("zzzxxx insn: {insn:?}");
-        }
+        }*/
 
         for block in block_ids.iter() {
             if *block != entry_b {
@@ -475,7 +479,7 @@ mod winged {
                 let is_first_instruction = Some(insn) == first_instruction;
                 // let is_first_instruction = false;
 
-                println!("ops: {ops:?} insn: {insn:?}");
+                //println!("ops: {ops:?} insn: {insn:?}");
                 for op in ops {
                     if op.kind() == OperandKind::Def {
                         if is_first_instruction && op.pos() == regalloc2::OperandPos::Early {
