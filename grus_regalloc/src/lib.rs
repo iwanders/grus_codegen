@@ -354,22 +354,43 @@ mod winged {
         }
 
         // Iterate over all the blocks and collect the vregs used in each block.
-        let mut vregs_in_block: HashMap<Block, HashSet<VReg>> = Default::default();
+        #[derive(Debug, Clone, Default)]
+        struct BlockVregProperties {
+            non_local: HashSet<VReg>,
+            input: HashSet<VReg>,
+            defines: HashSet<VReg>,
+            uses: HashSet<VReg>,
+        }
+        impl BlockVregProperties {
+            pub fn update_nonlocal(&mut self) {
+                // Non local is, not input, not def, but use.
+                self.non_local = self.uses.clone();
+                self.non_local = self.non_local.difference(&self.input).copied().collect();
+                self.non_local = self.non_local.difference(&self.defines).copied().collect();
+            }
+        }
+        let mut vregs_in_block: HashMap<Block, BlockVregProperties> = Default::default();
         for block in block_ids.iter() {
+            let mut properties = BlockVregProperties::default();
             for entry_vreg in fun.block_params(entry_b) {
-                vregs_in_block
-                    .entry(*block)
-                    .or_default()
-                    .insert(*entry_vreg);
+                properties.input.insert(*entry_vreg);
             }
             for insn in fun.block_insns(*block).iter() {
                 let operands = fun.inst_operands(insn);
-                for vreg in operands.iter().map(|z| z.vreg()) {
-                    vregs_in_block.entry(*block).or_default().insert(vreg);
+                //for vreg in operands.iter().map(|z| z.vreg()) {
+                for ops in operands.iter() {
+                    match ops.kind() {
+                        OperandKind::Def => properties.defines.insert(ops.vreg()),
+                        OperandKind::Use => properties.uses.insert(ops.vreg()),
+                    };
                 }
             }
+            properties.update_nonlocal();
+            vregs_in_block.insert(*block, properties);
         }
         debug!("vregs in block: {vregs_in_block:#?}");
+
+        // Next, for each block, identify what parameters are defined in the block
 
         todo!(
             "We should probably order the blocks such that they 'follow' the flow to a terminator?"
