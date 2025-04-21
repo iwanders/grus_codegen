@@ -4,7 +4,8 @@ use log::*;
 use regalloc2::Function as RegFunction;
 use regalloc2::Output as RegOutput;
 use regalloc2::{
-    Allocation, Inst, MachineEnv, Operand, OperandConstraint, PReg, RegAllocError, RegClass, VReg,
+    Allocation, Inst, MachineEnv, Operand, OperandConstraint, PReg, RegAllocError, RegClass,
+    SpillSlot, VReg,
 };
 
 pub mod svg;
@@ -68,6 +69,7 @@ pub struct Machine {
     pub preferred_regs_by_class: [HashMap<PReg, Option<VReg>>; 3],
     pub non_preferred_regs_by_class: [HashMap<PReg, Option<VReg>>; 3],
     pub non_preferred_reg_orders: [Vec<PReg>; 3],
+    pub stack_slots: HashMap<SpillSlot, Option<VReg>>,
 }
 
 impl Machine {
@@ -93,6 +95,7 @@ impl Machine {
             preferred_regs_by_class,
             non_preferred_regs_by_class,
             non_preferred_reg_orders,
+            stack_slots: Default::default(),
         }
     }
 
@@ -134,7 +137,18 @@ impl Machine {
         None
     }
 
-    pub fn assign(&mut self, preg: PReg, vreg: VReg) {
+    pub fn in_stackslot(&self, vreg: VReg) -> Option<SpillSlot> {
+        for (preg, value) in self.stack_slots.iter() {
+            if let Some(value) = value.as_ref() {
+                if *value == vreg {
+                    return Some(*preg);
+                }
+            }
+        }
+        None
+    }
+
+    pub fn assign_reg(&mut self, preg: PReg, vreg: VReg) {
         // Should we return a move instruction here in case preg is not empty?
 
         let reg_groups = [
@@ -153,6 +167,16 @@ impl Machine {
             }
         }
         unreachable!()
+    }
+
+    pub fn def_stack(&mut self, vreg: VReg) -> Result<SpillSlot, RegAllocError> {
+        if let Some(already_in) = self.in_stackslot(vreg) {
+            Ok(already_in)
+        } else {
+            let new_slot = SpillSlot::new(self.stack_slots.len());
+            self.stack_slots.insert(new_slot, Some(vreg));
+            Ok(new_slot)
+        }
     }
 
     pub fn def_register(&mut self, op: &Operand) -> Result<Allocation, RegAllocError> {
@@ -363,7 +387,7 @@ mod winged {
         }
         impl BlockVregProperties {
             pub fn update_nonlocal(&mut self) {
-                // Non local is, not input, not def, but use.
+                // Non local is use, bit not input, not def.
                 self.non_local = self.uses.clone();
                 self.non_local = self.non_local.difference(&self.input).copied().collect();
                 self.non_local = self.non_local.difference(&self.defines).copied().collect();
@@ -377,7 +401,6 @@ mod winged {
             }
             for insn in fun.block_insns(*block).iter() {
                 let operands = fun.inst_operands(insn);
-                //for vreg in operands.iter().map(|z| z.vreg()) {
                 for ops in operands.iter() {
                     match ops.kind() {
                         OperandKind::Def => properties.defines.insert(ops.vreg()),
@@ -392,9 +415,15 @@ mod winged {
 
         // Next, for each block, identify what parameters are defined in the block
 
-        todo!(
-            "We should probably order the blocks such that they 'follow' the flow to a terminator?"
-        );
+        // For now, lets put all the non local vregs onto the stack.
+        let stack_vreg: HashSet<_> = vregs_in_block
+            .values()
+            .map(|z| z.non_local.iter())
+            .flatten()
+            .collect();
+        debug!("stack vregs: {stack_vreg:#?}");
+
+        // Next, collect some lifetime ranges
         for block in block_ids.iter() {
             if *block != entry_b {
                 // This is not the entry block, so the block parameters will... somehow exist.
@@ -470,7 +499,7 @@ mod winged {
                 match op.constraint() {
                     OperandConstraint::FixedReg(preg) => {
                         if machine.is_empty(preg) {
-                            machine.assign(preg, op.vreg());
+                            machine.assign_reg(preg, op.vreg());
                         } else {
                             todo!("got a def on {preg:?} but that is occupied")
                         }
@@ -509,7 +538,7 @@ mod winged {
                         match op.constraint() {
                             OperandConstraint::FixedReg(preg) => {
                                 if machine.is_empty(preg) {
-                                    machine.assign(preg, op.vreg());
+                                    machine.assign_reg(preg, op.vreg());
                                     tracker.add_allocation(insn, Allocation::reg(preg));
                                 } else {
                                     todo!("got a def on {preg:?} but that is occupied")
