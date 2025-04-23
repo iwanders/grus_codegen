@@ -714,3 +714,49 @@ impl Instruction {
         Ok(v)
     }
 }
+
+#[cfg(test)]
+mod test {
+
+    fn hexstring(buffer: &[u8]) -> String {
+        let mut s = String::new();
+        for b in buffer.iter() {
+            s += &format!(" 0x{b:0>2x}");
+        }
+        s
+    }
+
+    fn bitstring(buffer: &[u8]) -> String {
+        let mut s = String::new();
+        for b in buffer.iter() {
+            s += &format!(" 0b{b:0>8b}");
+        }
+        s
+    }
+    use super::*;
+    #[test]
+    fn test_addition() {
+        let add_rax_rbx = Instruction::op(
+            Op::IAdd(Width::W64),
+            &[Operand::Reg(Reg::EBX), Operand::Reg(Reg::ECX)],
+        );
+        let serialized = add_rax_rbx.serialize().unwrap();
+        println!(
+            "{add_rax_rbx:?}:  {}  {}",
+            hexstring(&serialized),
+            bitstring(&serialized)
+        );
+        assert_eq!(&serialized, &[0x48, 0x03, 0xd9]);
+        let add_rax_rbx = Instruction::op(
+            Op::IAdd(Width::W64),
+            &[Operand::Reg(Reg::R11), Operand::Reg(Reg::EDX)],
+        );
+        let serialized = add_rax_rbx.serialize().unwrap();
+        println!(
+            "{add_rax_rbx:?}: {}  {}",
+            hexstring(&serialized),
+            bitstring(&serialized)
+        );
+        assert_eq!(&serialized, &[0x4c, 0x03, 0xda]);
+    }
+}
