@@ -418,7 +418,7 @@ dependencies = [
  "grus_regalloc",
  "libc",
  "log",
- "regalloc2 0.11.3",
+ "regalloc2 0.12.1",
  "serde",
  "serde_json",
  "target-lexicon",
@@ -446,7 +446,7 @@ dependencies = [
  "anyhow",
  "cranelift-codegen",
  "log",
- "regalloc2 0.11.3",
+ "regalloc2 0.12.1",
  "svg",
  "svg_util",
  "thiserror",
@@ -601,7 +601,9 @@ dependencies = [
 
 [[package]]
 name = "regalloc2"
-version = "0.11.3"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "987b16639ffa003f99fe9c183ce633c6ba2578f6383b2f04fe9dc669f9aac55a"
 dependencies = [
  "allocator-api2",
  "bumpalo",
