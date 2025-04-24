@@ -736,27 +736,37 @@ mod test {
     use super::*;
     #[test]
     fn test_addition() {
-        let add_rax_rbx = Instruction::op(
-            Op::IAdd(Width::W64),
-            &[Operand::Reg(Reg::EBX), Operand::Reg(Reg::ECX)],
-        );
-        let serialized = add_rax_rbx.serialize().unwrap();
-        println!(
-            "{add_rax_rbx:?}:  {}  {}",
-            hexstring(&serialized),
-            bitstring(&serialized)
-        );
-        assert_eq!(&serialized, &[0x48, 0x03, 0xd9]);
-        let add_rax_rbx = Instruction::op(
-            Op::IAdd(Width::W64),
-            &[Operand::Reg(Reg::R11), Operand::Reg(Reg::EDX)],
-        );
-        let serialized = add_rax_rbx.serialize().unwrap();
-        println!(
-            "{add_rax_rbx:?}: {}  {}",
-            hexstring(&serialized),
-            bitstring(&serialized)
-        );
-        assert_eq!(&serialized, &[0x4c, 0x03, 0xda]);
+        let instructions_expectation: Vec<(Instruction, &[u8])> = vec![
+            (
+                Instruction::op(
+                    Op::IAdd(Width::W64),
+                    &[Operand::Reg(Reg::EBX), Operand::Reg(Reg::ECX)],
+                ),
+                &[0x48, 0x03, 0xd9],
+            ),
+            (
+                Instruction::op(
+                    Op::IAdd(Width::W64),
+                    &[Operand::Reg(Reg::R11), Operand::Reg(Reg::EDX)],
+                ),
+                &[0x4c, 0x03, 0xda],
+            ),
+            (
+                Instruction::op(
+                    Op::And(Width::W64),
+                    &[Operand::Reg(Reg::R11), Operand::Immediate(0xDEADBEEF)],
+                ),
+                &[0x49, 0x81, 0xe3, 0xef, 0xbe, 0xad, 0xde],
+            ),
+        ];
+        for (instruction, expectation) in instructions_expectation {
+            let serialized = instruction.serialize().unwrap();
+            println!(
+                "{instruction:?}:  {}  {}",
+                hexstring(&serialized),
+                bitstring(&serialized)
+            );
+            assert_eq!(&serialized, expectation);
+        }
     }
 }
