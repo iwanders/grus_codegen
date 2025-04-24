@@ -441,6 +441,27 @@ impl Instruction {
                         v.extend(opcode.iter());
                         v.extend((b as u32).to_le_bytes());
                     }
+
+                    (Operand::RegOffset(reg_offset), Operand::Immediate(b)) => {
+                        let (rex, opcode) = Self::addr_reg(
+                            reg_offset.reg,
+                            &[0x81, 0],
+                            Width::W64,
+                            ModSpec::MemoryDisp32Extension(0),
+                        )?;
+                        v.push(rex.into());
+                        v.extend(opcode.iter());
+
+                        v.extend(
+                            (reg_offset
+                                .offset
+                                .as_immediate()
+                                .expect("unhandled reg offset")
+                                as i32)
+                                .to_le_bytes(),
+                        );
+                        v.extend((b as u32).to_le_bytes());
+                    }
                     _ => todo!(),
                 }
             }
@@ -753,10 +774,25 @@ mod test {
             ),
             (
                 Instruction::op(
-                    Op::And(Width::W64),
-                    &[Operand::Reg(Reg::R11), Operand::Immediate(0xDEADBEEF)],
+                    Op::IAdd(Width::W64),
+                    &[Operand::Reg(Reg::R11), Operand::Immediate(1337)],
                 ),
-                &[0x49, 0x81, 0xe3, 0xef, 0xbe, 0xad, 0xde],
+                &[0x49, 0x81, 0xc3, 0x39, 0x05, 0x00, 0x00],
+            ),
+            (
+                Instruction::op(
+                    Op::IAdd(Width::W64),
+                    &[
+                        Operand::RegOffset(RegOffset {
+                            reg: Reg::EBP,
+                            offset: Offset::Immediate(8),
+                        }),
+                        Operand::Immediate(1337),
+                    ],
+                ),
+                &[
+                    0x48, 0x81, 0x85, 0x08, 0x00, 0x00, 0x00, 0x39, 0x05, 0x00, 0x00,
+                ],
             ),
         ];
         for (instruction, expectation) in instructions_expectation {
